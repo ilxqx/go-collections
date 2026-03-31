@@ -498,3 +498,11 @@ func BenchmarkCOWList_Write(b *testing.B) {
 		l.Add(0)
 	}
 }
+
+func TestCowList_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	l := NewCOWList[int]()
+	assert.False(t, l.IsNotEmpty(), "new list should not be non-empty")
+	l.Add(1)
+	assert.True(t, l.IsNotEmpty(), "list with element should be non-empty")
+}

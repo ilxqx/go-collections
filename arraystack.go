@@ -38,7 +38,8 @@ func NewArrayStackFrom[T any](elements ...T) Stack[T] {
 func (s *arrayStack[T]) Size() int { return len(s.data) }
 
 // IsEmpty reports whether empty.
-func (s *arrayStack[T]) IsEmpty() bool { return len(s.data) == 0 }
+func (s *arrayStack[T]) IsEmpty() bool    { return len(s.data) == 0 }
+func (s *arrayStack[T]) IsNotEmpty() bool { return !s.IsEmpty() }
 
 // Clear removes all elements (retains capacity).
 func (s *arrayStack[T]) Clear() {

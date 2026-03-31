@@ -41,7 +41,8 @@ func NewHashMapFrom[K comparable, V any](src map[K]V) Map[K, V] {
 func (h *hashMap[K, V]) Size() int { return len(h.m) }
 
 // IsEmpty reports whether the map has no entries.
-func (h *hashMap[K, V]) IsEmpty() bool { return len(h.m) == 0 }
+func (h *hashMap[K, V]) IsEmpty() bool    { return len(h.m) == 0 }
+func (h *hashMap[K, V]) IsNotEmpty() bool { return !h.IsEmpty() }
 
 // Clear removes all entries.
 func (h *hashMap[K, V]) Clear() { clear(h.m) }

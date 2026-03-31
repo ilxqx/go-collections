@@ -43,7 +43,8 @@ func NewLinkedListFrom[T any](elements ...T) List[T] {
 func (l *linkedList[T]) Size() int { return l.size }
 
 // IsEmpty reports whether the list is empty.
-func (l *linkedList[T]) IsEmpty() bool { return l.size == 0 }
+func (l *linkedList[T]) IsEmpty() bool    { return l.size == 0 }
+func (l *linkedList[T]) IsNotEmpty() bool { return !l.IsEmpty() }
 
 // Clear removes all elements.
 func (l *linkedList[T]) Clear() {

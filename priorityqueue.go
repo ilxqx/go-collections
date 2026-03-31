@@ -107,7 +107,8 @@ func NewMaxPriorityQueue[T Ordered]() PriorityQueue[T] {
 func (pq *priorityQueue[T]) Size() int { return len(pq.data) }
 
 // IsEmpty reports whether the queue is empty.
-func (pq *priorityQueue[T]) IsEmpty() bool { return len(pq.data) == 0 }
+func (pq *priorityQueue[T]) IsEmpty() bool    { return len(pq.data) == 0 }
+func (pq *priorityQueue[T]) IsNotEmpty() bool { return !pq.IsEmpty() }
 
 // Clear removes all elements (retains capacity).
 func (pq *priorityQueue[T]) Clear() {

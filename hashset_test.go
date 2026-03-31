@@ -231,3 +231,11 @@ func TestHashSet_String(t *testing.T) {
 	require.Contains(t, str, "hashSet", "String should include type name")
 	require.Contains(t, str, "1", "String should include element value")
 }
+
+func TestHashSet_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	s := NewHashSet[int]()
+	assert.False(t, s.IsNotEmpty(), "new set should not be non-empty")
+	s.Add(1)
+	assert.True(t, s.IsNotEmpty(), "set with element should be non-empty")
+}

@@ -381,3 +381,11 @@ func TestLinkedList_AddSeq(t *testing.T) {
 	l.AddSeq(other.Seq())
 	assert.Equal(t, []int{1, 2, 3}, l.ToSlice(), "AddSeq should append all elements from seq")
 }
+
+func TestLinkedList_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	l := NewLinkedList[int]()
+	assert.False(t, l.IsNotEmpty(), "new list should not be non-empty")
+	l.Add(1)
+	assert.True(t, l.IsNotEmpty(), "list with element should be non-empty")
+}

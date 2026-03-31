@@ -549,3 +549,11 @@ func TestTreeMap_EqualsDifferentSizes(t *testing.T) {
 	// Different sizes should return false immediately
 	assert.False(t, m1.Equals(m2, eqV[string]), "Equals should return false for maps with different sizes")
 }
+
+func TestTreeMap_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	m := NewTreeMap[int, string](func(a, b int) int { return a - b })
+	assert.False(t, m.IsNotEmpty(), "new map should not be non-empty")
+	m.Put(1, "a")
+	assert.True(t, m.IsNotEmpty(), "map with entry should be non-empty")
+}

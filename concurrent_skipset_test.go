@@ -652,3 +652,11 @@ func TestConcurrentSkipSet_AnyEarlyExit(t *testing.T) {
 	require.True(t, result, "Any should return true when element found")
 	require.Equal(t, 3, callCount, "Any should stop early when predicate returns true")
 }
+
+func TestConcurrentSkipSet_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	s := NewConcurrentSkipSet[int]()
+	assert.False(t, s.IsNotEmpty(), "new set should not be non-empty")
+	s.Add(1)
+	assert.True(t, s.IsNotEmpty(), "set with element should be non-empty")
+}

@@ -43,7 +43,8 @@ func NewHashSetFrom[T comparable](elements ...T) Set[T] {
 func (s *hashSet[T]) Size() int { return len(s.m) }
 
 // IsEmpty reports whether the set contains no elements.
-func (s *hashSet[T]) IsEmpty() bool { return len(s.m) == 0 }
+func (s *hashSet[T]) IsEmpty() bool    { return len(s.m) == 0 }
+func (s *hashSet[T]) IsNotEmpty() bool { return !s.IsEmpty() }
 
 // Clear removes all elements from the set.
 func (s *hashSet[T]) Clear() { clear(s.m) }

@@ -613,3 +613,11 @@ func TestSegmentedList_NewSegmentedListWithSegments(t *testing.T) {
 	l3.Add(1)
 	require.Equal(t, 1, l3.Size(), "List with default segment should work")
 }
+
+func TestSegmentedList_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	l := NewSegmentedList[int]()
+	assert.False(t, l.IsNotEmpty(), "new list should not be non-empty")
+	l.Add(1)
+	assert.True(t, l.IsNotEmpty(), "list with element should be non-empty")
+}

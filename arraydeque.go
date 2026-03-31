@@ -41,7 +41,8 @@ func NewArrayDequeFrom[T any](elements ...T) Deque[T] {
 func (d *arrayDeque[T]) Size() int { return d.size }
 
 // IsEmpty reports whether the deque is empty.
-func (d *arrayDeque[T]) IsEmpty() bool { return d.size == 0 }
+func (d *arrayDeque[T]) IsEmpty() bool    { return d.size == 0 }
+func (d *arrayDeque[T]) IsNotEmpty() bool { return !d.IsEmpty() }
 
 // Clear removes all elements (retains capacity).
 func (d *arrayDeque[T]) Clear() {

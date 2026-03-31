@@ -40,7 +40,8 @@ func NewArrayListFrom[T any](elements ...T) List[T] {
 func (l *arrayList[T]) Size() int { return len(l.data) }
 
 // IsEmpty reports whether the list is empty.
-func (l *arrayList[T]) IsEmpty() bool { return len(l.data) == 0 }
+func (l *arrayList[T]) IsEmpty() bool    { return len(l.data) == 0 }
+func (l *arrayList[T]) IsNotEmpty() bool { return !l.IsEmpty() }
 
 // Clear removes all elements (capacity is retained).
 func (l *arrayList[T]) Clear() {

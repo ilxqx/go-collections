@@ -167,6 +167,7 @@ list.Sort(collections.CompareFunc[int]())
 |--------|-------------|
 | `Size() int` | Returns the number of elements |
 | `IsEmpty() bool` | Reports whether the set is empty |
+| `IsNotEmpty() bool` | Reports whether the set contains at least one element |
 | `Clear()` | Removes all elements |
 | `ToSlice() []T` | Returns a snapshot slice of all elements |
 | `String() string` | Returns a string representation |
@@ -362,6 +363,7 @@ func NewConcurrentSkipSetFrom[T Ordered](elements ...T) ConcurrentSortedSet[T]
 |--------|-------------|
 | `Size() int` | Returns the number of entries |
 | `IsEmpty() bool` | Reports whether the map is empty |
+| `IsNotEmpty() bool` | Reports whether the map contains at least one entry |
 | `Clear()` | Removes all entries |
 | `String() string` | Returns a string representation |
 | `Put(key K, value V) (V, bool)` | Associates value with key; returns (old, existed) |
@@ -594,6 +596,7 @@ func NewConcurrentSkipMapFrom[K Ordered, V any](src map[K]V) ConcurrentSortedMap
 |--------|-------------|
 | `Size() int` | Returns the number of elements |
 | `IsEmpty() bool` | Reports whether the list is empty |
+| `IsNotEmpty() bool` | Reports whether the list contains at least one element |
 | `Clear()` | Removes all elements |
 | `ToSlice() []T` | Returns a snapshot slice |
 | `String() string` | Returns a string representation |
@@ -784,6 +787,7 @@ func NewLockFreeListFrom[T any](eq Equaler[T], elements ...T) List[T]
 |--------|-------------|
 | `Size() int` | Returns the number of elements |
 | `IsEmpty() bool` | Reports whether the stack is empty |
+| `IsNotEmpty() bool` | Reports whether the stack contains at least one element |
 | `Clear()` | Removes all elements |
 | `String() string` | Returns a string representation |
 | `Push(element T)` | Adds element to top |
@@ -836,6 +840,7 @@ for v := range stack.Seq() {
 |--------|-------------|
 | `Size() int` | Returns the number of elements |
 | `IsEmpty() bool` | Reports whether the queue is empty |
+| `IsNotEmpty() bool` | Reports whether the queue contains at least one element |
 | `Clear()` | Removes all elements |
 | `String() string` | Returns a string representation |
 | `Enqueue(element T)` | Adds element to back |
@@ -933,6 +938,7 @@ v, _ = pq.Pop()   // 4
 |--------|-------------|
 | `Size() int` | Returns the number of elements |
 | `IsEmpty() bool` | Reports whether the deque is empty |
+| `IsNotEmpty() bool` | Reports whether the deque contains at least one element |
 | `Clear()` | Removes all elements |
 | `String() string` | Returns a string representation |
 | `PushFront(element T)` | Adds element to front |

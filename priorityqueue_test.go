@@ -257,3 +257,11 @@ func TestPriorityQueue_Duplicates(t *testing.T) {
 	v, _ = pq.Pop()
 	assert.Equal(t, 3, v, "Final elements should be 3")
 }
+
+func TestPriorityQueue_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	pq := NewPriorityQueue[int](func(a, b int) int { return a - b })
+	assert.False(t, pq.IsNotEmpty(), "new priority queue should not be non-empty")
+	pq.Push(1)
+	assert.True(t, pq.IsNotEmpty(), "priority queue with element should be non-empty")
+}

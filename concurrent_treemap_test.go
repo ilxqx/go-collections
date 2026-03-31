@@ -736,3 +736,11 @@ func TestConcurrentTreeMap_SeqEarlyExit(t *testing.T) {
 	}
 	require.Equal(t, []int{1, 2, 3}, collected, "Seq should support early exit")
 }
+
+func TestConcurrentTreeMap_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	m := NewConcurrentTreeMap[int, string](func(a, b int) int { return a - b })
+	require.False(t, m.IsNotEmpty(), "new map should not be non-empty")
+	m.Put(1, "a")
+	require.True(t, m.IsNotEmpty(), "map with entry should be non-empty")
+}

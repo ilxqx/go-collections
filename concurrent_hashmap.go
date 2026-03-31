@@ -33,7 +33,8 @@ func NewConcurrentHashMapFrom[K comparable, V any](src map[K]V) ConcurrentMap[K,
 func (m *concurrentHashMap[K, V]) Size() int { return m.m.Size() }
 
 // IsEmpty reports whether the map is empty (approximate under concurrency).
-func (m *concurrentHashMap[K, V]) IsEmpty() bool { return m.Size() == 0 }
+func (m *concurrentHashMap[K, V]) IsEmpty() bool    { return m.Size() == 0 }
+func (m *concurrentHashMap[K, V]) IsNotEmpty() bool { return !m.IsEmpty() }
 
 // Clear removes all entries.
 func (m *concurrentHashMap[K, V]) Clear() { m.m.Clear() }

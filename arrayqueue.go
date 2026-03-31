@@ -39,7 +39,8 @@ func NewArrayQueueFrom[T any](elements ...T) Queue[T] {
 func (q *arrayQueue[T]) Size() int { return len(q.data) - q.head }
 
 // IsEmpty reports whether the queue is empty.
-func (q *arrayQueue[T]) IsEmpty() bool { return q.Size() == 0 }
+func (q *arrayQueue[T]) IsEmpty() bool    { return q.Size() == 0 }
+func (q *arrayQueue[T]) IsNotEmpty() bool { return !q.IsEmpty() }
 
 // Clear removes all elements (retains capacity).
 func (q *arrayQueue[T]) Clear() {

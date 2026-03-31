@@ -286,3 +286,11 @@ func TestArrayQueue_EnqueueAllEmpty(t *testing.T) {
 	q.EnqueueAll() // No elements
 	assert.Equal(t, initialSize, q.Size(), "Size should remain unchanged after EnqueueAll with empty elements")
 }
+
+func TestArrayQueue_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	q := NewArrayQueue[int]()
+	assert.False(t, q.IsNotEmpty(), "new queue should not be non-empty")
+	q.Enqueue(1)
+	assert.True(t, q.IsNotEmpty(), "queue with element should be non-empty")
+}

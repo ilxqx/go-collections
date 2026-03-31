@@ -50,7 +50,8 @@ func NewTreeSetFrom[T any](c Comparator[T], elements ...T) SortedSet[T] {
 func (t *treeSet[T]) Size() int { return t.bt.Len() }
 
 // IsEmpty reports whether the set is empty.
-func (t *treeSet[T]) IsEmpty() bool { return t.bt.Len() == 0 }
+func (t *treeSet[T]) IsEmpty() bool    { return t.bt.Len() == 0 }
+func (t *treeSet[T]) IsNotEmpty() bool { return !t.IsEmpty() }
 
 // Clear removes all elements.
 func (t *treeSet[T]) Clear() { t.bt.Clear() }

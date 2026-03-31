@@ -680,3 +680,11 @@ func TestConcurrentTreeSet_RangeSeqEarlyExit(t *testing.T) {
 	}
 	require.Equal(t, []int{3, 4, 5}, collected, "RangeSeq should support early exit")
 }
+
+func TestConcurrentTreeSet_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	s := NewConcurrentTreeSet[int](func(a, b int) int { return a - b })
+	assert.False(t, s.IsNotEmpty(), "new set should not be non-empty")
+	s.Add(1)
+	assert.True(t, s.IsNotEmpty(), "set with element should be non-empty")
+}

@@ -269,3 +269,11 @@ t.Parallel()
 	assert.Equal(t, 2, removed, "RetainFunc should remove two evens")
 	assert.False(t, s.Contains(2), "Should not contain element")
 }
+
+func TestConcurrentHashSet_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	s := NewConcurrentHashSet[int]()
+	assert.False(t, s.IsNotEmpty(), "new set should not be non-empty")
+	s.Add(1)
+	assert.True(t, s.IsNotEmpty(), "set with element should be non-empty")
+}

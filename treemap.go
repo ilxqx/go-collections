@@ -61,7 +61,8 @@ func NewTreeMapFrom[K comparable, V any](cmpK Comparator[K], m map[K]V) SortedMa
 func (t *treeMap[K, V]) Size() int { return t.bt.Len() }
 
 // IsEmpty reports whether the map is empty.
-func (t *treeMap[K, V]) IsEmpty() bool { return t.bt.Len() == 0 }
+func (t *treeMap[K, V]) IsEmpty() bool    { return t.bt.Len() == 0 }
+func (t *treeMap[K, V]) IsNotEmpty() bool { return !t.IsEmpty() }
 
 // Clear removes all entries.
 func (t *treeMap[K, V]) Clear() { t.bt.Clear() }

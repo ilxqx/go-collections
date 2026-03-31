@@ -38,7 +38,8 @@ func NewConcurrentSkipMapFrom[K Ordered, V any](src map[K]V) ConcurrentSortedMap
 func (c *concurrentSkipMap[K, V]) Size() int { return c.m.Len() }
 
 // IsEmpty reports whether the map is empty.
-func (c *concurrentSkipMap[K, V]) IsEmpty() bool { return c.Size() == 0 }
+func (c *concurrentSkipMap[K, V]) IsEmpty() bool    { return c.Size() == 0 }
+func (c *concurrentSkipMap[K, V]) IsNotEmpty() bool { return !c.IsEmpty() }
 
 // Clear removes all entries by resetting the underlying structure.
 func (c *concurrentSkipMap[K, V]) Clear() { c.m = skipmap.New[K, V]() }

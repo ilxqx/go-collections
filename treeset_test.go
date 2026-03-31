@@ -567,3 +567,11 @@ func TestTreeSet_EqualsDifferentSizes(t *testing.T) {
 	// Different sizes should return false immediately
 	require.False(t, s1.Equals(s2), "Equals should return false for sets with different sizes")
 }
+
+func TestTreeSet_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	s := NewTreeSet[int](func(a, b int) int { return a - b })
+	assert.False(t, s.IsNotEmpty(), "new set should not be non-empty")
+	s.Add(1)
+	assert.True(t, s.IsNotEmpty(), "set with element should be non-empty")
+}

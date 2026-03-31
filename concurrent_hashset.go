@@ -36,7 +36,8 @@ func NewConcurrentHashSetFrom[T comparable](elements ...T) ConcurrentSet[T] {
 func (s *concurrentHashSet[T]) Size() int { return s.m.Size() }
 
 // IsEmpty reports whether the set is empty (approximate under concurrency).
-func (s *concurrentHashSet[T]) IsEmpty() bool { return s.Size() == 0 }
+func (s *concurrentHashSet[T]) IsEmpty() bool    { return s.Size() == 0 }
+func (s *concurrentHashSet[T]) IsNotEmpty() bool { return !s.IsEmpty() }
 
 // Clear removes all elements.
 func (s *concurrentHashSet[T]) Clear() { s.m.Clear() }

@@ -539,3 +539,11 @@ func TestConcurrentHashMap_GetOrComputeExisting(t *testing.T) {
 	require.Equal(t, "existing", v, "GetOrCompute should return existing value")
 }
 
+
+func TestConcurrentHashMap_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	m := NewConcurrentHashMap[string, int]()
+	assert.False(t, m.IsNotEmpty(), "new map should not be non-empty")
+	m.Put("a", 1)
+	assert.True(t, m.IsNotEmpty(), "map with entry should be non-empty")
+}

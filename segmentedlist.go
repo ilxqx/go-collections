@@ -77,6 +77,9 @@ func (l *segmentedList[T]) IsEmpty() bool {
 	return l.Size() == 0
 }
 
+// IsNotEmpty reports whether the list contains at least one element.
+func (l *segmentedList[T]) IsNotEmpty() bool { return !l.IsEmpty() }
+
 // Clear removes all elements.
 func (l *segmentedList[T]) Clear() {
 	l.mu.Lock()

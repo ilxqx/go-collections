@@ -382,3 +382,11 @@ func TestHashMap_RemoveNotFound(t *testing.T) {
 
 	require.Equal(t, 1, m.Size(), "Size should be 1 after one removal")
 }
+
+func TestHashMap_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	m := NewHashMap[string, int]()
+	require.False(t, m.IsNotEmpty(), "new map should not be non-empty")
+	m.Put("a", 1)
+	require.True(t, m.IsNotEmpty(), "map with entry should be non-empty")
+}

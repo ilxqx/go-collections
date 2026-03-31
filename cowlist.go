@@ -51,7 +51,8 @@ func (l *cowList[T]) snapshot() []T {
 func (l *cowList[T]) Size() int { return len(l.snapshot()) }
 
 // IsEmpty reports whether the list is empty.
-func (l *cowList[T]) IsEmpty() bool { return len(l.snapshot()) == 0 }
+func (l *cowList[T]) IsEmpty() bool    { return len(l.snapshot()) == 0 }
+func (l *cowList[T]) IsNotEmpty() bool { return !l.IsEmpty() }
 
 // Clear removes all elements.
 func (l *cowList[T]) Clear() {

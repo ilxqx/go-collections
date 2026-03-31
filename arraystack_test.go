@@ -138,3 +138,11 @@ func TestArrayStack_SeqEarlyExit(t *testing.T) {
 	}
 	assert.Equal(t, []int{10, 9, 8, 7, 6}, collected, "Seq should support early exit")
 }
+
+func TestArrayStack_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	s := NewArrayStack[int]()
+	assert.False(t, s.IsNotEmpty(), "new stack should not be non-empty")
+	s.Push(1)
+	assert.True(t, s.IsNotEmpty(), "stack with element should be non-empty")
+}

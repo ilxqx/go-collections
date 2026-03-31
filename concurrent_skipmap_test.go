@@ -806,3 +806,11 @@ func TestConcurrentSkipMap_FoarlyExit(t *testing.T) {
 	})
 	require.Equal(t, []int{1, 2, 3, 4, 5}, collected, "ForEach should support early exit")
 }
+
+func TestConcurrentSkipMap_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	m := NewConcurrentSkipMap[int, string]()
+	require.False(t, m.IsNotEmpty(), "new map should not be non-empty")
+	m.Put(1, "a")
+	require.True(t, m.IsNotEmpty(), "map with entry should be non-empty")
+}

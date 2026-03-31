@@ -344,3 +344,11 @@ func TestArrayList_ReversedEarlyExit(t *testing.T) {
 	}
 	assert.Equal(t, []int{10, 9, 8, 7, 6}, collected, "Reversed should support early exit")
 }
+
+func TestArrayList_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	l := NewArrayList[int]()
+	assert.False(t, l.IsNotEmpty(), "new list should not be non-empty")
+	l.Add(1)
+	assert.True(t, l.IsNotEmpty(), "list with element should be non-empty")
+}

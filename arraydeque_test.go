@@ -240,3 +240,11 @@ func TestArrayDeque_ReversedEarlyExit(t *testing.T) {
 	}
 	assert.Equal(t, []int{10, 9, 8, 7, 6}, collected, "Reversed should support early exit")
 }
+
+func TestArrayDeque_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	d := NewArrayDeque[int]()
+	assert.False(t, d.IsNotEmpty(), "new deque should not be non-empty")
+	d.PushBack(1)
+	assert.True(t, d.IsNotEmpty(), "deque with element should be non-empty")
+}

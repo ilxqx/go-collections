@@ -18,6 +18,8 @@ type Collection[T any] interface {
 	Size() int
 	// IsEmpty reports whether the collection contains no elements.
 	IsEmpty() bool
+	// IsNotEmpty reports whether the collection contains at least one element.
+	IsNotEmpty() bool
 	// Clear removes all elements from the collection.
 	Clear()
 	// ToSlice returns a snapshot slice of all elements.
@@ -271,6 +273,8 @@ type Stack[T any] interface {
 	Size() int
 	// IsEmpty reports whether the stack is empty.
 	IsEmpty() bool
+	// IsNotEmpty reports whether the stack contains at least one element.
+	IsNotEmpty() bool
 	// Clear removes all elements.
 	Clear()
 	// String returns a string representation.
@@ -301,6 +305,8 @@ type Queue[T any] interface {
 	Size() int
 	// IsEmpty reports whether the queue is empty.
 	IsEmpty() bool
+	// IsNotEmpty reports whether the queue contains at least one element.
+	IsNotEmpty() bool
 	// Clear removes all elements.
 	Clear()
 	// String returns a string representation.
@@ -331,6 +337,8 @@ type Deque[T any] interface {
 	Size() int
 	// IsEmpty reports whether the deque is empty.
 	IsEmpty() bool
+	// IsNotEmpty reports whether the deque contains at least one element.
+	IsNotEmpty() bool
 	// Clear removes all elements.
 	Clear()
 	// String returns a string representation.
@@ -373,6 +381,8 @@ type PriorityQueue[T any] interface {
 	Size() int
 	// IsEmpty reports whether the queue is empty.
 	IsEmpty() bool
+	// IsNotEmpty reports whether the queue contains at least one element.
+	IsNotEmpty() bool
 	// Clear removes all elements.
 	Clear()
 	// String returns a string representation.
@@ -415,6 +425,8 @@ type Map[K, V any] interface {
 	Size() int
 	// IsEmpty reports whether the map has no entries.
 	IsEmpty() bool
+	// IsNotEmpty reports whether the map contains at least one entry.
+	IsNotEmpty() bool
 	// Clear removes all entries.
 	Clear()
 	// String returns a string representation.

@@ -56,6 +56,9 @@ func (c *concurrentTreeSet[T]) IsEmpty() bool {
 	return c.tree.IsEmpty()
 }
 
+// IsNotEmpty reports whether the set contains at least one element.
+func (c *concurrentTreeSet[T]) IsNotEmpty() bool { return !c.IsEmpty() }
+
 // Clear removes all elements.
 func (c *concurrentTreeSet[T]) Clear() {
 	c.mu.Lock()

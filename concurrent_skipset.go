@@ -38,7 +38,8 @@ func NewConcurrentSkipSetFrom[T Ordered](elements ...T) ConcurrentSortedSet[T] {
 func (c *concurrentSkipSet[T]) Size() int { return c.s.Len() }
 
 // IsEmpty reports whether the set is empty.
-func (c *concurrentSkipSet[T]) IsEmpty() bool { return c.Size() == 0 }
+func (c *concurrentSkipSet[T]) IsEmpty() bool    { return c.Size() == 0 }
+func (c *concurrentSkipSet[T]) IsNotEmpty() bool { return !c.IsEmpty() }
 
 // Clear removes all elements by replacing the underlying structure.
 // Note: This may cause a temporary memory peak while the old structure is

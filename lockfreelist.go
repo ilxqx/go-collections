@@ -100,6 +100,9 @@ func (l *lockFreeList[T]) IsEmpty() bool {
 	return l.Size() == 0
 }
 
+// IsNotEmpty reports whether the list contains at least one element.
+func (l *lockFreeList[T]) IsNotEmpty() bool { return !l.IsEmpty() }
+
 // Clear removes all elements (not truly lock-free, uses snapshot).
 func (l *lockFreeList[T]) Clear() {
 	// Reset to sentinel nodes

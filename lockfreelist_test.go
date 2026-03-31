@@ -629,3 +629,11 @@ func TestLockFreeList_EveryFalse(t *testing.T) {
 	result := l.Every(func(e int) bool { return e > 3 })
 	assert.False(t, result, "Every should return false when not all elements match")
 }
+
+func TestLockFreeList_IsNotEmpty(t *testing.T) {
+	t.Parallel()
+	l := NewLockFreeListOrdered[int]()
+	assert.False(t, l.IsNotEmpty(), "new list should not be non-empty")
+	l.Add(1)
+	assert.True(t, l.IsNotEmpty(), "list with element should be non-empty")
+}

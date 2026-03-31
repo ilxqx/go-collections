@@ -57,6 +57,9 @@ func (c *concurrentTreeMap[K, V]) IsEmpty() bool {
 	return c.tm.IsEmpty()
 }
 
+// IsNotEmpty reports whether the map contains at least one entry.
+func (c *concurrentTreeMap[K, V]) IsNotEmpty() bool { return !c.IsEmpty() }
+
 // Clear removes all entries.
 func (c *concurrentTreeMap[K, V]) Clear() {
 	c.mu.Lock()
