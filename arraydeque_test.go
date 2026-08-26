@@ -82,7 +82,7 @@ func TestArrayDeque_ToSlice(t *testing.T) {
 	t.Parallel()
 	d := NewArrayDequeFrom(1, 2, 3)
 	slice := d.ToSlice()
-	assert.Equal(t, 3, len(slice), "ToSlice should return 3 elements")
+	assert.Len(t, slice, 3, "ToSlice should return 3 elements")
 	assert.Equal(t, 1, slice[0], "Front element should be first in slice")
 	assert.Equal(t, 3, slice[2], "Back element should be last in slice")
 }

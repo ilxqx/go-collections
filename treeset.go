@@ -5,7 +5,7 @@ import (
 	"cmp"
 	"encoding/gob"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"iter"
 
 	"github.com/tidwall/btree"
@@ -34,7 +34,7 @@ func NewTreeSet[T any](c Comparator[T]) SortedSet[T] {
 
 // NewTreeSetOrdered creates an empty TreeSet for Ordered types.
 func NewTreeSetOrdered[T Ordered]() SortedSet[T] {
-	return newTreeSet(func(a, b T) int { return cmp.Compare(a, b) })
+	return newTreeSet(cmp.Compare[T])
 }
 
 // NewTreeSetFrom creates a TreeSet and inserts all elements.
@@ -405,24 +405,24 @@ func (t *treeSet[T]) Max() (T, bool) { return t.Last() }
 
 // PopFirst removes and returns the smallest element.
 func (t *treeSet[T]) PopFirst() (T, bool) {
-	min, ok := t.bt.Min()
+	first, ok := t.bt.Min()
 	if !ok {
 		var zero T
 		return zero, false
 	}
-	t.bt.Delete(min)
-	return min, true
+	t.bt.Delete(first)
+	return first, true
 }
 
 // PopLast removes and returns the largest element.
 func (t *treeSet[T]) PopLast() (T, bool) {
-	max, ok := t.bt.Max()
+	last, ok := t.bt.Max()
 	if !ok {
 		var zero T
 		return zero, false
 	}
-	t.bt.Delete(max)
-	return max, true
+	t.bt.Delete(last)
+	return last, true
 }
 
 // Floor returns the greatest element <= x.
@@ -624,8 +624,8 @@ func (t *treeSet[T]) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON implements json.Unmarshaler.
 // Returns an error because TreeSet requires a comparator.
 // Use UnmarshalTreeSetOrderedJSON or UnmarshalTreeSetJSON instead.
-func (t *treeSet[T]) UnmarshalJSON(data []byte) error {
-	return fmt.Errorf("cannot unmarshal TreeSet directly: use UnmarshalTreeSetOrderedJSON[T]() for Ordered types or UnmarshalTreeSetJSON[T](data, comparator) for custom comparators")
+func (*treeSet[T]) UnmarshalJSON(_ []byte) error {
+	return errors.New("cannot unmarshal TreeSet directly: use UnmarshalTreeSetOrderedJSON[T]() for Ordered types or UnmarshalTreeSetJSON[T](data, comparator) for custom comparators")
 }
 
 // GobEncode implements gob.GobEncoder.
@@ -646,8 +646,8 @@ func (t *treeSet[T]) GobEncode() ([]byte, error) {
 // GobDecode implements gob.GobDecoder.
 // Returns an error because TreeSet requires a comparator.
 // Use UnmarshalTreeSetOrderedGob or UnmarshalTreeSetGob instead.
-func (t *treeSet[T]) GobDecode(data []byte) error {
-	return fmt.Errorf("cannot unmarshal TreeSet directly: use UnmarshalTreeSetOrderedGob[T]() for Ordered types or UnmarshalTreeSetGob[T](data, comparator) for custom comparators")
+func (*treeSet[T]) GobDecode(_ []byte) error {
+	return errors.New("cannot unmarshal TreeSet directly: use UnmarshalTreeSetOrderedGob[T]() for Ordered types or UnmarshalTreeSetGob[T](data, comparator) for custom comparators")
 }
 
 // Compile-time conformance check.

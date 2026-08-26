@@ -432,7 +432,7 @@ func TestLockFreeList_AddSeq(t *testing.T) {
 	assert.True(t, slices.Equal(l.ToSlice(), expected), "AddSeq should append to existing elements")
 
 	// Empty sequence
-	emptySeq := func(yield func(int) bool) {}
+	emptySeq := func(_ func(int) bool) {}
 	l.AddSeq(emptySeq)
 	assert.Equal(t, 6, l.Size(), "Empty sequence should not add elements")
 }
@@ -505,18 +505,19 @@ func TestLockFreeList_PhysicalDelete(t *testing.T) {
 
 	// Snapshot should only contain odds
 	snapBefore := l.ToSlice()
-	require.Equal(t, n/2, len(snapBefore), "Snapshot should contain half the elements")
+	require.Len(t, snapBefore, n/2, "Snapshot should contain half the elements")
 	for _, v := range snapBefore {
 		assert.Equal(t, 1, v%2, "Snapshot before physical delete should contain only odd numbers")
 	}
 
 	// Physical deletion should unlink logically deleted nodes without changing visible semantics
-	lf := l.(*lockFreeList[int])
+	lf, ok := l.(*lockFreeList[int])
+	require.True(t, ok, "list should be *lockFreeList")
 	lf.PhysicalDelete()
 
 	// Snapshot after physical delete remains the same (odds only)
 	snapAfter := l.ToSlice()
-	require.Equal(t, n/2, len(snapAfter), "Snapshot should still contain half the elements")
+	require.Len(t, snapAfter, n/2, "Snapshot should still contain half the elements")
 	for _, v := range snapAfter {
 		assert.Equal(t, 1, v%2, "Snapshot after physical delete should contain only odd numbers")
 	}
@@ -524,7 +525,7 @@ func TestLockFreeList_PhysicalDelete(t *testing.T) {
 	// Idempotency: calling PhysicalDelete again should not change content
 	lf.PhysicalDelete()
 	snapAgain := l.ToSlice()
-	require.Equal(t, n/2, len(snapAgain), "Snapshot should remain unchanged after repeat delete")
+	require.Len(t, snapAgain, n/2, "Snapshot should remain unchanged after repeat delete")
 	for i := range snapAfter {
 		assert.Equal(t, snapAfter[i], snapAgain[i], "Sequence should match expected")
 	}

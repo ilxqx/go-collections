@@ -179,7 +179,7 @@ func (q *arrayQueue[T]) GobDecode(data []byte) error {
 	return nil
 }
 
-// Compile-time conformance
+// Compile-time conformance.
 var (
 	_ Queue[int] = (*arrayQueue[int])(nil)
 )

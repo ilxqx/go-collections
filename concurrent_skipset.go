@@ -696,7 +696,7 @@ func (c *concurrentSkipSet[T]) GobDecode(data []byte) error {
 	return nil
 }
 
-// Conformance
+// Conformance.
 var (
 	_ ConcurrentSortedSet[int] = (*concurrentSkipSet[int])(nil)
 )

@@ -11,7 +11,7 @@ import (
 // arrayList is a growable array-backed implementation of List[T].
 // - Preserves insertion order
 // - Supports O(1) append and amortized growth
-// - Insert/RemoveAt are O(n) due to shifting
+// - Insert/RemoveAt are O(n) due to shifting.
 type arrayList[T any] struct {
 	data []T
 }
@@ -351,7 +351,7 @@ func (l *arrayList[T]) GobDecode(data []byte) error {
 	return dec.Decode(&l.data)
 }
 
-// Compile-time conformance
+// Compile-time conformance.
 var (
 	_ List[int] = (*arrayList[int])(nil)
 )

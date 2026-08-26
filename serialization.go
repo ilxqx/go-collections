@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"fmt"
 )
 
@@ -11,13 +12,13 @@ import (
 // Serialization Helpers
 // ==========================
 
-// serializableEntry is used for serializing maps with non-comparable keys
+// serializableEntry is used for serializing maps with non-comparable keys.
 type serializableEntry[K, V any] struct {
 	Key   K `json:"key"`
 	Value V `json:"value"`
 }
 
-// serializableMap wraps map entries for JSON serialization
+// serializableMap wraps map entries for JSON serialization.
 type serializableMap[K, V any] struct {
 	Entries []serializableEntry[K, V] `json:"entries"`
 }
@@ -30,7 +31,7 @@ type serializableMap[K, V any] struct {
 // Requires a comparator to be provided.
 func UnmarshalTreeSetJSON[T any](data []byte, comparator Comparator[T]) (SortedSet[T], error) {
 	if comparator == nil {
-		return nil, fmt.Errorf("unmarshal treeset: comparator required")
+		return nil, errors.New("unmarshal treeset: comparator required")
 	}
 
 	var elements []T
@@ -53,7 +54,7 @@ func UnmarshalTreeSetOrderedJSON[T Ordered](data []byte) (SortedSet[T], error) {
 // Requires a comparator to be provided.
 func UnmarshalTreeMapJSON[K, V any](data []byte, comparator Comparator[K]) (SortedMap[K, V], error) {
 	if comparator == nil {
-		return nil, fmt.Errorf("unmarshal treemap: comparator required")
+		return nil, errors.New("unmarshal treemap: comparator required")
 	}
 
 	var wrapped serializableMap[K, V]
@@ -78,7 +79,7 @@ func UnmarshalTreeMapOrderedJSON[K Ordered, V any](data []byte) (SortedMap[K, V]
 // Requires a comparator to be provided.
 func UnmarshalTreeSetGob[T any](data []byte, comparator Comparator[T]) (SortedSet[T], error) {
 	if comparator == nil {
-		return nil, fmt.Errorf("unmarshal treeset gob: comparator required")
+		return nil, errors.New("unmarshal treeset gob: comparator required")
 	}
 
 	var elements []T
@@ -102,7 +103,7 @@ func UnmarshalTreeSetOrderedGob[T Ordered](data []byte) (SortedSet[T], error) {
 // Requires a comparator to be provided.
 func UnmarshalTreeMapGob[K, V any](data []byte, comparator Comparator[K]) (SortedMap[K, V], error) {
 	if comparator == nil {
-		return nil, fmt.Errorf("unmarshal treemap gob: comparator required")
+		return nil, errors.New("unmarshal treemap gob: comparator required")
 	}
 
 	var entries []serializableEntry[K, V]
@@ -128,7 +129,7 @@ func UnmarshalTreeMapOrderedGob[K Ordered, V any](data []byte) (SortedMap[K, V],
 // Requires a comparator to be provided.
 func UnmarshalPriorityQueueJSON[T any](data []byte, comparator Comparator[T]) (PriorityQueue[T], error) {
 	if comparator == nil {
-		return nil, fmt.Errorf("unmarshal priorityqueue: comparator required")
+		return nil, errors.New("unmarshal priorityqueue: comparator required")
 	}
 
 	var elements []T
@@ -151,7 +152,7 @@ func UnmarshalPriorityQueueOrderedJSON[T Ordered](data []byte) (PriorityQueue[T]
 // Requires a comparator to be provided.
 func UnmarshalPriorityQueueGob[T any](data []byte, comparator Comparator[T]) (PriorityQueue[T], error) {
 	if comparator == nil {
-		return nil, fmt.Errorf("unmarshal priorityqueue gob: comparator required")
+		return nil, errors.New("unmarshal priorityqueue gob: comparator required")
 	}
 
 	var elements []T

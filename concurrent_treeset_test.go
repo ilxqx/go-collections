@@ -165,16 +165,13 @@ func TestConcurrentTreeSet_Algebra(t *testing.T) {
 	i := a.Intersection(b).ToSlice()
 	d := a.Difference(b).ToSlice()
 	sd := a.SymmetricDifference(b).ToSlice()
-	expectContains := func(slice []int, x int) bool {
-		return slices.Contains(slice, x)
-	}
-	assert.Truef(t, expectContains(u, 1) && expectContains(u, 5), "Union unexpected: %v", u)
+	assert.Truef(t, slices.Contains(u, 1) && slices.Contains(u, 5), "Union unexpected: %v", u)
 	assert.Len(t, i, 2, "Intersection unexpected: %v", i)
-	assert.True(t, expectContains(i, 3) && expectContains(i, 4), "Contains should be true for expected element")
+	assert.True(t, slices.Contains(i, 3) && slices.Contains(i, 4), "Contains should be true for expected element")
 	assert.Len(t, d, 2, "Difference unexpected: %v", d)
-	assert.True(t, expectContains(d, 1) && expectContains(d, 2), "Contains should be true for expected element")
+	assert.True(t, slices.Contains(d, 1) && slices.Contains(d, 2), "Contains should be true for expected element")
 	assert.Len(t, sd, 3, "SymmetricDifference unexpected: %v", sd)
-	assert.True(t, expectContains(sd, 1) && expectContains(sd, 2) && expectContains(sd, 5), "Contains should be true for expected element")
+	assert.True(t, slices.Contains(sd, 1) && slices.Contains(sd, 2) && slices.Contains(sd, 5), "Contains should be true for expected element")
 }
 
 func TestConcurrentTreeSet_AscendDescend(t *testing.T) {
@@ -333,7 +330,7 @@ func TestConcurrentTreeSet_Equals(t *testing.T) {
 // Race test colocated with concurrent tree set tests.
 func TestConcurrentTreeSet_Races(t *testing.T) {
 	t.Parallel()
-	synctest.Test(t, func(t *testing.T) {
+	synctest.Test(t, func(_ *testing.T) {
 		s := NewConcurrentTreeSetOrdered[int]()
 		workers := runtime.GOMAXPROCS(0) * 2
 		iters := 500
@@ -351,7 +348,7 @@ func TestConcurrentTreeSet_Races(t *testing.T) {
 					}
 					if i%100 == 0 {
 						count := 0
-						s.Range(-1<<31, 1<<31-1, func(e int) bool {
+						s.Range(-1<<31, 1<<31-1, func(_ int) bool {
 							if count > 10 {
 								return false
 							}
@@ -396,7 +393,7 @@ func TestConcurrentTreeSet_ForEachEarlyExit(t *testing.T) {
 
 	// ForEach with early exit (return false)
 	count := 0
-	s.ForEach(func(e int) bool {
+	s.ForEach(func(_ int) bool {
 		count++
 		return false // Early exit after first iteration
 	})
@@ -419,7 +416,7 @@ func TestConcurrentTreeSet_FindScenarios(t *testing.T) {
 
 	// Find in empty set
 	emptySet := NewConcurrentTreeSetOrdered[int]()
-	_, ok = emptySet.Find(func(e int) bool { return true })
+	_, ok = emptySet.Find(func(_ int) bool { return true })
 	require.False(t, ok, "Find should be false for empty set")
 }
 
@@ -447,7 +444,7 @@ func TestConcurrentTreeSet_AscendScenarios(t *testing.T) {
 	// Ascend on empty set
 	emptySet := NewConcurrentTreeSetOrdered[int]()
 	count := 0
-	emptySet.Ascend(func(e int) bool {
+	emptySet.Ascend(func(_ int) bool {
 		count++
 		return true
 	})
@@ -455,7 +452,7 @@ func TestConcurrentTreeSet_AscendScenarios(t *testing.T) {
 
 	// Ascend with early termination
 	earlyCount := 0
-	s.Ascend(func(e int) bool {
+	s.Ascend(func(_ int) bool {
 		earlyCount++
 		return earlyCount < 3 // Stop after 3 iterations
 	})
@@ -474,7 +471,7 @@ func TestConcurrentTreeSet_CoverageSupplement(t *testing.T) {
 
 	// ForEach
 	cnt := 0
-	s.ForEach(func(e int) bool {
+	s.ForEach(func(_ int) bool {
 		cnt++
 		return true
 	})

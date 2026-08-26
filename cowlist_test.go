@@ -280,7 +280,7 @@ func TestCOWList_AddSeq(t *testing.T) {
 	assert.True(t, slices.Equal(l.ToSlice(), expected), "AddSeq should append to existing elements")
 
 	// Empty sequence
-	emptySeq := func(yield func(int) bool) {}
+	emptySeq := func(_ func(int) bool) {}
 	l.AddSeq(emptySeq)
 	assert.Equal(t, 6, l.Size(), "Empty sequence should not add elements")
 }

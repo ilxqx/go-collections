@@ -254,7 +254,7 @@ type List[T any] interface {
 	// Filter returns a new list of elements satisfying predicate.
 	Filter(predicate func(element T) bool) List[T]
 	// Sort sorts elements in place using the comparator.
-	Sort(cmp Comparator[T])
+	Sort(comparator Comparator[T])
 
 	// --- Aggregation ---
 	// Any returns true if at least one element satisfies predicate.
@@ -680,7 +680,7 @@ type ConcurrentMap[K, V any] interface {
 
 	// CompareAndSwap replaces value if current equals old.
 	// BEST-EFFORT: Atomic in ConcurrentHashMap; may race in ConcurrentSkipMap.
-	CompareAndSwap(key K, old, new V, eq Equaler[V]) bool
+	CompareAndSwap(key K, oldValue, newValue V, eq Equaler[V]) bool
 
 	// CompareAndDelete deletes entry if current value equals provided.
 	// BEST-EFFORT: Atomic in ConcurrentHashMap; may race in ConcurrentSkipMap.

@@ -41,7 +41,8 @@ func TestLinkedList_Basic(t *testing.T) {
 
 func TestLinkedList_AddFirst(t *testing.T) {
 	t.Parallel()
-	l := NewLinkedList[int]().(*linkedList[int])
+	l, ok := NewLinkedList[int]().(*linkedList[int])
+	require.True(t, ok, "NewLinkedList should return *linkedList")
 	l.AddFirst(3)
 	l.AddFirst(2)
 	l.AddFirst(1)

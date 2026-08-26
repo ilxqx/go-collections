@@ -37,7 +37,7 @@ func TestArrayList_BasicCRUD(t *testing.T) {
 	assert.Equal(t, 7, removed, "RemoveAt should return removed element")
 	assert.True(t, l.Remove(20, eqV[int]), "Remove should succeed for present element")
 	rf := l.RemoveFunc(func(x int) bool { return x%2 == 0 })
-	assert.Greater(t, rf, 0, "RemoveFunc expected to remove evens")
+	assert.Positive(t, rf, "RemoveFunc expected to remove evens")
 	l = NewArrayListFrom(1, 2, 3, 4, 5)
 	rr := l.RetainFunc(func(x int) bool { return x > 3 })
 	assert.Equal(t, 3, rr, "RetainFunc should remove elements <= 3")
@@ -57,9 +57,9 @@ func TestArrayList_SearchViewSortAggregate(t *testing.T) {
 	sub := l.SubList(1, 4).ToSlice()
 	assert.True(t, slices.Equal(sub, []int{2, 3, 2}), "SubList=%v", sub)
 	// Sort ascending for test
-	l.Sort(func(a, b int) int { return cmp.Compare(a, b) })
+	l.Sort(cmp.Compare)
 	got := l.ToSlice()
-	assert.True(t, slices.IsSortedFunc(got, func(a, b int) int { return cmp.Compare(a, b) }), "Sort ascending failed: %v", got)
+	assert.True(t, slices.IsSortedFunc(got, cmp.Compare), "Sort ascending failed: %v", got)
 	assert.True(t, l.Any(func(x int) bool { return x == 1 }), "Any should be true for value 1")
 	assert.True(t, l.Every(func(x int) bool { return x >= 1 }), "Every should be true for all values >= 1")
 	// Seq and Reversed consistencies
@@ -73,7 +73,7 @@ func TestArrayList_SearchViewSortAggregate(t *testing.T) {
 	}
 	revCopy := slices.Clone(revVals)
 	slices.Reverse(revCopy)
-	assert.Equal(t, len(seqVals), len(revVals), "Seq and Reversed should yield same count")
+	assert.Len(t, revVals, len(seqVals), "Seq and Reversed should yield same count")
 	assert.True(t, slices.Equal(seqVals, revCopy), "Seq vs Reversed mismatch: %v vs %v", seqVals, revVals)
 }
 
@@ -83,7 +83,7 @@ func TestArrayList_InsertAtEnd(t *testing.T) {
 	require.True(t, l.Insert(l.Size(), 4), "Insert should succeed for valid index")
 	got := l.ToSlice()
 	want := []int{1, 2, 3, 4}
-	assert.Equal(t, len(want), len(got), "Slice lengths should match")
+	assert.Len(t, got, len(want), "Slice lengths should match")
 	for i, v := range want {
 		assert.Equal(t, v, got[i], "Values should match, got=%v want=%v", got, want)
 	}
@@ -149,7 +149,7 @@ func TestArrayList_ForEach(t *testing.T) {
 	assert.Equal(t, 15, sum, "ForEach should visit all elements")
 	// Test early termination
 	count := 0
-	l.ForEach(func(v int) bool {
+	l.ForEach(func(_ int) bool {
 		count++
 		return count < 3
 	})
@@ -170,7 +170,7 @@ func TestArrayList_Filter(t *testing.T) {
 	l := NewArrayListFrom(1, 2, 3, 4, 5, 6)
 	evens := l.Filter(func(v int) bool { return v%2 == 0 })
 	slice := evens.ToSlice()
-	assert.Equal(t, 3, len(slice), "Filter should keep three evens")
+	assert.Len(t, slice, 3, "Filter should keep three evens")
 	for _, v := range slice {
 		assert.Equal(t, 0, v%2, "All filtered values should be even")
 	}
@@ -290,7 +290,7 @@ func TestArrayList_FindIndexEmpty(t *testing.T) {
 	t.Parallel()
 	// Test FindIndex on empty list
 	l := NewArrayList[int]()
-	assert.Equal(t, -1, l.FindIndex(func(x int) bool { return true }), "FindIndex should return -1 on empty list")
+	assert.Equal(t, -1, l.FindIndex(func(_ int) bool { return true }), "FindIndex should return -1 on empty list")
 }
 
 func TestArrayList_EveryEmpty(t *testing.T) {

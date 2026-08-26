@@ -5,7 +5,7 @@ import (
 	"cmp"
 	"encoding/gob"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"iter"
 
 	"github.com/tidwall/btree"
@@ -45,7 +45,7 @@ func NewTreeMap[K any, V any](cmpK Comparator[K]) SortedMap[K, V] {
 
 // NewTreeMapOrdered creates an empty TreeMap for Ordered keys.
 func NewTreeMapOrdered[K Ordered, V any]() SortedMap[K, V] {
-	return newTreeMap[K, V](func(a, b K) int { return cmp.Compare(a, b) })
+	return newTreeMap[K, V](cmp.Compare)
 }
 
 // NewTreeMapFrom creates a TreeMap from a standard Go map (copying entries).
@@ -708,8 +708,8 @@ func (t *treeMap[K, V]) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON implements json.Unmarshaler.
 // Returns an error because TreeMap requires a comparator.
 // Use UnmarshalTreeMapOrderedJSON or UnmarshalTreeMapJSON instead.
-func (t *treeMap[K, V]) UnmarshalJSON(data []byte) error {
-	return fmt.Errorf("cannot unmarshal TreeMap directly: use UnmarshalTreeMapOrderedJSON[K, V]() for Ordered key types or UnmarshalTreeMapJSON[K, V](data, comparator) for custom comparators")
+func (*treeMap[K, V]) UnmarshalJSON(_ []byte) error {
+	return errors.New("cannot unmarshal TreeMap directly: use UnmarshalTreeMapOrderedJSON[K, V]() for Ordered key types or UnmarshalTreeMapJSON[K, V](data, comparator) for custom comparators")
 }
 
 // GobEncode implements gob.GobEncoder.
@@ -739,8 +739,8 @@ func (t *treeMap[K, V]) GobEncode() ([]byte, error) {
 // GobDecode implements gob.GobDecoder.
 // Returns an error because TreeMap requires a comparator.
 // Use UnmarshalTreeMapOrderedGob or UnmarshalTreeMapGob instead.
-func (t *treeMap[K, V]) GobDecode(data []byte) error {
-	return fmt.Errorf("cannot unmarshal TreeMap directly: use UnmarshalTreeMapOrderedGob[K, V]() for Ordered key types or UnmarshalTreeMapGob[K, V](data, comparator) for custom comparators")
+func (*treeMap[K, V]) GobDecode(_ []byte) error {
+	return errors.New("cannot unmarshal TreeMap directly: use UnmarshalTreeMapOrderedGob[K, V]() for Ordered key types or UnmarshalTreeMapGob[K, V](data, comparator) for custom comparators")
 }
 
 // Compile-time conformance check.

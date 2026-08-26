@@ -120,7 +120,7 @@ func (c *concurrentSkipMap[K, V]) ContainsKey(key K) bool {
 // ContainsValue reports whether value exists (O(n)).
 func (c *concurrentSkipMap[K, V]) ContainsValue(value V, eq Equaler[V]) bool {
 	found := false
-	c.m.Range(func(k K, v V) bool {
+	c.m.Range(func(_ K, v V) bool {
 		if eq(v, value) {
 			found = true
 			return false
@@ -352,9 +352,9 @@ func (c *concurrentSkipMap[K, V]) GetOrCompute(key K, compute func() V) (V, bool
 func (c *concurrentSkipMap[K, V]) RemoveAndGet(key K) (V, bool) { return c.m.LoadAndDelete(key) }
 
 // CompareAndSwap replaces value if current equals old (best-effort, not atomic).
-func (c *concurrentSkipMap[K, V]) CompareAndSwap(key K, old, new V, eq Equaler[V]) bool {
-	if cur, ok := c.m.Load(key); ok && eq(cur, old) {
-		c.m.Store(key, new)
+func (c *concurrentSkipMap[K, V]) CompareAndSwap(key K, oldValue, newValue V, eq Equaler[V]) bool {
+	if cur, ok := c.m.Load(key); ok && eq(cur, oldValue) {
+		c.m.Store(key, newValue)
 		return true
 	}
 	return false
@@ -798,7 +798,7 @@ func (c *concurrentSkipMap[K, V]) GobDecode(data []byte) error {
 	return nil
 }
 
-// Conformance
+// Conformance.
 var (
 	_ ConcurrentSortedMap[int, string] = (*concurrentSkipMap[int, string])(nil)
 )

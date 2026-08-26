@@ -130,7 +130,7 @@ func (m *concurrentHashMap[K, V]) ContainsKey(key K) bool {
 // ContainsValue reports whether value exists (O(n)).
 func (m *concurrentHashMap[K, V]) ContainsValue(value V, eq Equaler[V]) bool {
 	found := false
-	m.m.Range(func(k K, v V) bool {
+	m.m.Range(func(_ K, v V) bool {
 		if eq(v, value) {
 			found = true
 			return false
@@ -290,7 +290,7 @@ func (m *concurrentHashMap[K, V]) ReplaceIf(key K, oldValue, newValue V, eq Equa
 
 // ReplaceAll replaces each value with function(key, value).
 func (m *concurrentHashMap[K, V]) ReplaceAll(function func(key K, value V) V) {
-	m.m.Range(func(k K, v V) bool {
+	m.m.Range(func(k K, _ V) bool {
 		m.m.Compute(k, func(prev V, loaded bool) (V, bool) {
 			if !loaded {
 				return prev, false
@@ -411,12 +411,12 @@ func (m *concurrentHashMap[K, V]) RemoveAndGet(key K) (V, bool) {
 }
 
 // CompareAndSwap atomically replaces value if current equals old.
-func (m *concurrentHashMap[K, V]) CompareAndSwap(key K, old, new V, eq Equaler[V]) bool {
+func (m *concurrentHashMap[K, V]) CompareAndSwap(key K, oldValue, newValue V, eq Equaler[V]) bool {
 	var swapped bool
 	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
-		if loaded && eq(prev, old) {
+		if loaded && eq(prev, oldValue) {
 			swapped = true
-			return new, false
+			return newValue, false
 		}
 		return prev, false
 	})
@@ -501,7 +501,7 @@ func (m *concurrentHashMap[K, V]) GobDecode(data []byte) error {
 	return nil
 }
 
-// Conformance
+// Conformance.
 var (
 	_ ConcurrentMap[int, string] = (*concurrentHashMap[int, string])(nil)
 )

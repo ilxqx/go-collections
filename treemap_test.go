@@ -32,14 +32,14 @@ func TestTreeMap_BasicAndOrder(t *testing.T) {
 	for k := range m.Reversed() {
 		dec = append(dec, k)
 	}
-	assert.Equal(t, 3, len(dec), "Reversed should yield three keys")
+	assert.Len(t, dec, 3, "Reversed should yield three keys")
 	assert.Equal(t, 3, dec[0], "Reversed first key should be max")
 	assert.Equal(t, 1, dec[2], "Reversed last key should be min")
 }
 
 func TestTreeMap_NavigationAndExtremes(t *testing.T) {
 	t.Parallel()
-	m := NewTreeMap[int, int](func(a, b int) int { return cmp.Compare(a, b) })
+	m := NewTreeMap[int, int](cmp.Compare)
 	for i := 1; i <= 5; i++ {
 		m.Put(i*10, i)
 	}
@@ -84,7 +84,7 @@ func TestTreeMap_RangeRankAndViews(t *testing.T) {
 	m.Put(40, 4)
 	// Range
 	rs := make([]int, 0)
-	m.Range(15, 35, func(k, v int) bool {
+	m.Range(15, 35, func(k, _ int) bool {
 		rs = append(rs, k)
 		return true
 	})
@@ -113,35 +113,35 @@ func TestTreeMap_AscendDescend(t *testing.T) {
 	m.Put(4, 40)
 	// Ascend
 	asc := make([]int, 0)
-	m.Ascend(func(k, v int) bool {
+	m.Ascend(func(k, _ int) bool {
 		asc = append(asc, k)
 		return true
 	})
 	assert.Equal(t, []int{1, 2, 3, 4, 5}, asc, "Ascend should iterate ascending order")
 	// Descend
 	desc := make([]int, 0)
-	m.Descend(func(k, v int) bool {
+	m.Descend(func(k, _ int) bool {
 		desc = append(desc, k)
 		return true
 	})
 	assert.Equal(t, []int{5, 4, 3, 2, 1}, desc, "Descend should iterate descending order")
 	// AscendFrom
 	af := make([]int, 0)
-	m.AscendFrom(3, func(k, v int) bool {
+	m.AscendFrom(3, func(k, _ int) bool {
 		af = append(af, k)
 		return true
 	})
 	assert.Equal(t, []int{3, 4, 5}, af, "AscendFrom should iterate from pivot upwards")
 	// DescendFrom
 	df := make([]int, 0)
-	m.DescendFrom(3, func(k, v int) bool {
+	m.DescendFrom(3, func(k, _ int) bool {
 		df = append(df, k)
 		return true
 	})
 	assert.Equal(t, []int{3, 2, 1}, df, "DescendFrom should iterate from pivot downwards")
 	// Test early termination
 	count := 0
-	m.Ascend(func(k, v int) bool {
+	m.Ascend(func(_, _ int) bool {
 		count++
 		return count < 3
 	})
@@ -156,14 +156,14 @@ func TestTreeMap_RangeFromAndTo(t *testing.T) {
 	}
 	// RangeFrom
 	rf := make([]int, 0)
-	m.RangeFrom(3, func(k, v int) bool {
+	m.RangeFrom(3, func(k, _ int) bool {
 		rf = append(rf, k)
 		return true
 	})
 	assert.Equal(t, []int{3, 4, 5}, rf, "Slice should match expected")
 	// RangeTo
 	rt := make([]int, 0)
-	m.RangeTo(3, func(k, v int) bool {
+	m.RangeTo(3, func(k, _ int) bool {
 		rt = append(rt, k)
 		return true
 	})
@@ -220,7 +220,7 @@ func TestTreeMap_CloneAndFilter(t *testing.T) {
 	sortedClone := m.CloneSorted()
 	assert.Equal(t, 3, sortedClone.Size(), "Sorted clone size should match expected")
 	// Filter
-	filtered := m.Filter(func(k int, v string) bool { return k > 1 })
+	filtered := m.Filter(func(k int, _ string) bool { return k > 1 })
 	assert.Equal(t, 2, filtered.Size(), "Filter should keep two keys greater than 1")
 }
 
@@ -279,12 +279,12 @@ func TestTreeMap_RemoveFuncAndCompute(t *testing.T) {
 	m.Put(2, "b")
 	m.Put(3, "c")
 	// RemoveFunc
-	count := m.RemoveFunc(func(k int, v string) bool { return k > 1 })
+	count := m.RemoveFunc(func(k int, _ string) bool { return k > 1 })
 	assert.Equal(t, 2, count, "Count should match expected")
 	assert.Equal(t, 1, m.Size(), "Size should be 1 after RemoveFunc")
 	// Compute
 	m.Put(4, "d")
-	v, ok := m.Compute(4, func(k int, old string, exists bool) (string, bool) {
+	v, ok := m.Compute(4, func(_ int, old string, exists bool) (string, bool) {
 		if exists {
 			return old + "_updated", true
 		}
@@ -302,14 +302,14 @@ func TestTreeMap_ComputeRemoveKey(t *testing.T) {
 
 	// Compute on existing key -> remove (keep=false)
 	m.Put(3, "c")
-	_, ok := m.Compute(3, func(k int, old string, exists bool) (string, bool) {
+	_, ok := m.Compute(3, func(_ int, _ string, _ bool) (string, bool) {
 		return "", false // remove the key
 	})
 	require.False(t, ok, "Compute should return false when key is removed")
 	assert.False(t, m.ContainsKey(3), "Key should be removed")
 
 	// Compute on non-existing key (exists=false, keep=false) -> should do nothing
-	_, ok = m.Compute(99, func(k int, old string, exists bool) (string, bool) {
+	_, ok = m.Compute(99, func(_ int, _ string, _ bool) (string, bool) {
 		return "should_not_be_added", false
 	})
 	require.False(t, ok, "Compute should return false when key doesn't exist")
@@ -338,7 +338,7 @@ func TestTreeMap_Replace(t *testing.T) {
 func TestTreeMap_CoverageSupplement(t *testing.T) {
 	t.Parallel()
 	// NewTreeMapFrom
-	m := NewTreeMapFrom(func(a, b int) int { return cmp.Compare(a, b) }, map[int]string{1: "a", 2: "b"})
+	m := NewTreeMapFrom(cmp.Compare, map[int]string{1: "a", 2: "b"})
 	assert.Equal(t, 2, m.Size(), "Size should be 2 for initial map")
 	assert.True(t, m.ContainsKey(1), "ContainsKey should be true for present key")
 
@@ -380,13 +380,13 @@ func TestTreeMap_CoverageSupplement(t *testing.T) {
 	ks := m.Keys()
 	vs := m.Values()
 	es := m.Entries()
-	assert.Equal(t, 2, len(ks), "Keys length should match expected")
-	assert.Equal(t, 2, len(vs), "Values length should match expected")
-	assert.Equal(t, 2, len(es), "Entries length should match expected")
+	assert.Len(t, ks, 2, "Keys length should match expected")
+	assert.Len(t, vs, 2, "Values length should match expected")
+	assert.Len(t, es, 2, "Entries length should match expected")
 
 	// ForEach
 	cnt := 0
-	m.ForEach(func(k int, v string) bool {
+	m.ForEach(func(_ int, _ string) bool {
 		cnt++
 		return true
 	})
@@ -407,19 +407,19 @@ func TestTreeMap_CoverageSupplement(t *testing.T) {
 	// ComputeIfPresent
 	m.Put(10, "ten")
 	// Present -> update
-	v, ok := m.ComputeIfPresent(10, func(k int, old string) (string, bool) {
+	v, ok := m.ComputeIfPresent(10, func(_ int, old string) (string, bool) {
 		return old + "_updated", true
 	})
 	require.True(t, ok, "ComputeIfPresent should update and return true for existing key")
 	assert.Equal(t, "ten_updated", v, "Compute should return updated value")
 	// Present -> remove
-	_, ok = m.ComputeIfPresent(10, func(k int, old string) (string, bool) {
+	_, ok = m.ComputeIfPresent(10, func(_ int, _ string) (string, bool) {
 		return "", false
 	})
 	require.False(t, ok, "ComputeIfPresent should return false when function indicates removal")
 	assert.False(t, m.ContainsKey(10), "Should not contain element")
 	// Absent
-	_, ok = m.ComputeIfPresent(999, func(k int, old string) (string, bool) {
+	_, ok = m.ComputeIfPresent(999, func(_ int, _ string) (string, bool) {
 		return "new", true
 	})
 	require.False(t, ok, "ComputeIfPresent should be false for missing key")
@@ -427,20 +427,20 @@ func TestTreeMap_CoverageSupplement(t *testing.T) {
 	// Merge
 	m.Put(20, "a")
 	// Merge existing
-	v, ok = m.Merge(20, "b", func(old, new string) (string, bool) {
-		return old + new, true
+	v, ok = m.Merge(20, "b", func(old, newValue string) (string, bool) {
+		return old + newValue, true
 	})
 	require.True(t, ok, "Merge should update and return true for existing key")
 	assert.Equal(t, "ab", v, "Merge should return merged value for existing key")
 	// Merge existing -> remove
-	_, ok = m.Merge(20, "c", func(old, new string) (string, bool) {
+	_, ok = m.Merge(20, "c", func(_, _ string) (string, bool) {
 		return "", false
 	})
 	require.False(t, ok, "Merge should return false when function indicates removal")
 	assert.False(t, m.ContainsKey(20), "Should not contain element")
 	// Merge absent
-	v, ok = m.Merge(30, "new", func(old, new string) (string, bool) {
-		return new, true // shouldn't be called
+	v, ok = m.Merge(30, "new", func(_, newValue string) (string, bool) {
+		return newValue, true // shouldn't be called
 	})
 	require.True(t, ok, "Merge should insert and return true for missing key")
 	assert.Equal(t, "new", v, "Merge should return new value for missing key")
@@ -451,7 +451,7 @@ func TestTreeMap_CoverageSupplement(t *testing.T) {
 	assert.False(t, m.ReplaceIf(40, "wrong", "xxx", eqV[string]), "ReplaceIf should be false when current value mismatches")
 
 	// ReplaceAll
-	m.ReplaceAll(func(k int, v string) string {
+	m.ReplaceAll(func(_ int, v string) string {
 		return v + "!"
 	})
 	val, _ := m.Get(40)
@@ -498,18 +498,18 @@ func TestTreeMap_RangeReversed(t *testing.T) {
 
 	// Range with from > to should return empty
 	rs := make([]int, 0)
-	m.Range(5, 1, func(k, v int) bool {
+	m.Range(5, 1, func(k, _ int) bool {
 		rs = append(rs, k)
 		return true
 	})
-	assert.Equal(t, 0, len(rs), "Range should return empty when from > to")
+	assert.Empty(t, rs, "Range should return empty when from > to")
 
 	// RangeSeq with from > to should return empty
 	rseq := make([]int, 0)
 	for k := range m.RangeSeq(5, 1) {
 		rseq = append(rseq, k)
 	}
-	assert.Equal(t, 0, len(rseq), "RangeSeq should return empty when from > to")
+	assert.Empty(t, rseq, "RangeSeq should return empty when from > to")
 
 	// SubMap with from > to should return empty
 	sub := m.SubMap(5, 1)

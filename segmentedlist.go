@@ -33,11 +33,16 @@ const defaultSegmentCount = 16
 
 // NewSegmentedList creates a new segmented list with default segment count.
 func NewSegmentedList[T any]() List[T] {
-	return NewSegmentedListWithSegments[T](defaultSegmentCount)
+	return newSegmentedList[T](defaultSegmentCount)
 }
 
 // NewSegmentedListWithSegments creates a segmented list with specified segment count.
 func NewSegmentedListWithSegments[T any](segmentCount int) List[T] {
+	return newSegmentedList[T](segmentCount)
+}
+
+// newSegmentedList creates the concrete list for internal callers.
+func newSegmentedList[T any](segmentCount int) *segmentedList[T] {
 	if segmentCount < 1 {
 		segmentCount = 1
 	}
@@ -53,7 +58,7 @@ func NewSegmentedListWithSegments[T any](segmentCount int) List[T] {
 
 // NewSegmentedListFrom creates a segmented list from elements.
 func NewSegmentedListFrom[T any](elements ...T) List[T] {
-	l := NewSegmentedList[T]().(*segmentedList[T])
+	l := newSegmentedList[T](defaultSegmentCount)
 	l.AddAll(elements...)
 	return l
 }
@@ -697,7 +702,7 @@ func (l *segmentedList[T]) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	// Clear and rebuild without copying locks
-	newList := NewSegmentedList[T]().(*segmentedList[T])
+	newList := newSegmentedList[T](defaultSegmentCount)
 	for _, elem := range slice {
 		newList.Add(elem)
 	}
@@ -726,7 +731,7 @@ func (l *segmentedList[T]) GobDecode(data []byte) error {
 		return err
 	}
 	// Clear and rebuild without copying locks
-	newList := NewSegmentedList[T]().(*segmentedList[T])
+	newList := newSegmentedList[T](defaultSegmentCount)
 	for _, elem := range slice {
 		newList.Add(elem)
 	}
@@ -735,5 +740,5 @@ func (l *segmentedList[T]) GobDecode(data []byte) error {
 	return nil
 }
 
-// Compile-time conformance
+// Compile-time conformance.
 var _ List[int] = (*segmentedList[int])(nil)

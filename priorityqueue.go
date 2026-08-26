@@ -5,7 +5,7 @@ import (
 	"container/heap"
 	"encoding/gob"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"iter"
 	"slices"
 )
@@ -14,7 +14,7 @@ import (
 // - O(log n) push and pop
 // - O(1) peek
 // - By default, smallest element has highest priority (min-heap)
-// - Use a reverse comparator for max-heap behavior
+// - Use a reverse comparator for max-heap behavior.
 type priorityQueue[T any] struct {
 	data []T
 	cmp  Comparator[T]
@@ -186,8 +186,8 @@ func (pq *priorityQueue[T]) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON implements json.Unmarshaler.
 // Returns an error because PriorityQueue requires a comparator.
 // Use UnmarshalPriorityQueueOrderedJSON or UnmarshalPriorityQueueJSON instead.
-func (pq *priorityQueue[T]) UnmarshalJSON(data []byte) error {
-	return fmt.Errorf("cannot unmarshal PriorityQueue directly: use UnmarshalPriorityQueueOrderedJSON[T]() for Ordered types or UnmarshalPriorityQueueJSON[T](data, comparator) for custom comparators")
+func (*priorityQueue[T]) UnmarshalJSON(_ []byte) error {
+	return errors.New("cannot unmarshal PriorityQueue directly: use UnmarshalPriorityQueueOrderedJSON[T]() for Ordered types or UnmarshalPriorityQueueJSON[T](data, comparator) for custom comparators")
 }
 
 // GobEncode implements gob.GobEncoder.
@@ -208,11 +208,11 @@ func (pq *priorityQueue[T]) GobEncode() ([]byte, error) {
 // GobDecode implements gob.GobDecoder.
 // Returns an error because PriorityQueue requires a comparator.
 // Use UnmarshalPriorityQueueOrderedGob or UnmarshalPriorityQueueGob instead.
-func (pq *priorityQueue[T]) GobDecode(data []byte) error {
-	return fmt.Errorf("cannot unmarshal PriorityQueue directly: use UnmarshalPriorityQueueOrderedGob[T]() for Ordered types or UnmarshalPriorityQueueGob[T](data, comparator) for custom comparators")
+func (*priorityQueue[T]) GobDecode(_ []byte) error {
+	return errors.New("cannot unmarshal PriorityQueue directly: use UnmarshalPriorityQueueOrderedGob[T]() for Ordered types or UnmarshalPriorityQueueGob[T](data, comparator) for custom comparators")
 }
 
-// Compile-time conformance
+// Compile-time conformance.
 var (
 	_ PriorityQueue[int] = (*priorityQueue[int])(nil)
 )

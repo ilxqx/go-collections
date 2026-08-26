@@ -86,7 +86,7 @@ func TestConcurrentTreeMap_ConcurrentPutIfAbsentAndAtomics(t *testing.T) {
 // Race test colocated with concurrent tree map tests.
 func TestConcurrentTreeMap_Races(t *testing.T) {
 	t.Parallel()
-	synctest.Test(t, func(t *testing.T) {
+	synctest.Test(t, func(_ *testing.T) {
 		m := NewConcurrentTreeMapOrdered[int, int]()
 		workers := runtime.GOMAXPROCS(0) * 2
 		iters := 500
@@ -102,11 +102,11 @@ func TestConcurrentTreeMap_Races(t *testing.T) {
 					case 2:
 						m.Get(k)
 					default:
-						m.ReplaceAll(func(key, val int) int { return val })
+						m.ReplaceAll(func(_, val int) int { return val })
 					}
 					if i%100 == 0 {
 						count := 0
-						m.Range(-1<<31, 1<<31-1, func(k, v int) bool {
+						m.Range(-1<<31, 1<<31-1, func(_, _ int) bool {
 							if count > 10 {
 								return false
 							}
@@ -161,7 +161,7 @@ func TestConcurrentTreeMap_NavigationAndRange(t *testing.T) {
 
 	// Range
 	rs := make([]int, 0)
-	m.Range(15, 45, func(k, v int) bool {
+	m.Range(15, 45, func(k, _ int) bool {
 		rs = append(rs, k)
 		return true
 	})
@@ -190,7 +190,7 @@ func TestConcurrentTreeMap_Views(t *testing.T) {
 
 func TestConcurrentTreeMap_ClearAndClone(t *testing.T) {
 	t.Parallel()
-	m := NewConcurrentTreeMapFrom(func(a, b int) int { return cmp.Compare(a, b) }, map[int]string{1: "a", 2: "b", 3: "c"})
+	m := NewConcurrentTreeMapFrom(cmp.Compare, map[int]string{1: "a", 2: "b", 3: "c"})
 	require.False(t, m.IsEmpty(), "IsEmpty should be false")
 	// Clone
 	clone := m.Clone()
@@ -231,7 +231,7 @@ func TestConcurrentTreeMap_ComputeAndMerge(t *testing.T) {
 	t.Parallel()
 	m := NewConcurrentTreeMapOrdered[int, string]()
 	m.Put(1, "a")
-	v, ok := m.Compute(1, func(k int, old string, exists bool) (string, bool) {
+	v, ok := m.Compute(1, func(_ int, old string, exists bool) (string, bool) {
 		if exists {
 			return old + "_updated", true
 		}
@@ -240,18 +240,18 @@ func TestConcurrentTreeMap_ComputeAndMerge(t *testing.T) {
 	require.True(t, ok, "Compute should update when key exists and keep=true")
 	require.Equal(t, "a_updated", v, "Compute should return updated value")
 	// ComputeIfAbsent
-	v = m.ComputeIfAbsent(2, func(k int) string { return "b" })
+	v = m.ComputeIfAbsent(2, func(_ int) string { return "b" })
 	require.Equal(t, "b", v, "ComputeIfAbsent should return inserted value")
 	// ComputeIfPresent
-	v, ok = m.ComputeIfPresent(1, func(k int, old string) (string, bool) {
+	v, ok = m.ComputeIfPresent(1, func(_ int, old string) (string, bool) {
 		return old + "_again", true
 	})
 	require.True(t, ok, "ComputeIfPresent should update and return true for existing key")
 	require.Equal(t, "a_updated_again", v, "ComputeIfPresent should return updated value")
 
 	// Merge
-	v, ok = m.Merge(3, "c", func(old, new string) (string, bool) {
-		return old + "_" + new, true
+	v, ok = m.Merge(3, "c", func(old, newValue string) (string, bool) {
+		return old + "_" + newValue, true
 	})
 	require.True(t, ok, "Merge should insert and return true for missing key")
 	require.Equal(t, "c", v, "Merge should return inserted value for missing key")
@@ -271,7 +271,7 @@ func TestConcurrentTreeMap_ReplaceOperations(t *testing.T) {
 	require.True(t, m.ReplaceIf(1, "aa", "aaa", eqV[string]), "ReplaceIf should succeed when current value matches")
 	require.False(t, m.ReplaceIf(1, "wrong", "xxx", eqV[string]), "ReplaceIf should be false when current value mismatches")
 	// ReplaceAll
-	m.ReplaceAll(func(k int, v string) string { return v + "!" })
+	m.ReplaceAll(func(_ int, v string) string { return v + "!" })
 	v, _ = m.Get(1)
 	require.Equal(t, "aaa!", v, "ReplaceAll should update stored value")
 }
@@ -299,7 +299,7 @@ func TestConcurrentTreeMap_FilterAndEquals(t *testing.T) {
 	m.Put(1, "a")
 	m.Put(2, "b")
 	m.Put(3, "c")
-	filtered := m.Filter(func(k int, v string) bool { return k > 1 })
+	filtered := m.Filter(func(k int, _ string) bool { return k > 1 })
 	require.Equal(t, 2, filtered.Size(), "Filter should keep two keys greater than 1")
 	// Equals
 	m2 := NewConcurrentTreeMapOrdered[int, string]()
@@ -318,7 +318,7 @@ func TestConcurrentTreeMap_ForEachEarlyExit(t *testing.T) {
 
 	// ForEach with early exit (return false)
 	count := 0
-	m.ForEach(func(k int, v string) bool {
+	m.ForEach(func(_ int, _ string) bool {
 		count++
 		return false // Early exit after first iteration
 	})
@@ -336,7 +336,7 @@ func TestConcurrentTreeMap_AscendScenarios(t *testing.T) {
 
 	// Ascend iterates all elements in ascending key order
 	allKeys := []int{}
-	m.Ascend(func(k int, v string) bool {
+	m.Ascend(func(k int, _ string) bool {
 		allKeys = append(allKeys, k)
 		return true
 	})
@@ -344,7 +344,7 @@ func TestConcurrentTreeMap_AscendScenarios(t *testing.T) {
 
 	// Ascend from key 3
 	ascKeys := []int{}
-	m.AscendFrom(3, func(k int, v string) bool {
+	m.AscendFrom(3, func(k int, _ string) bool {
 		ascKeys = append(ascKeys, k)
 		return true
 	})
@@ -353,7 +353,7 @@ func TestConcurrentTreeMap_AscendScenarios(t *testing.T) {
 	// Ascend on empty map
 	emptyMap := NewConcurrentTreeMapOrdered[int, string]()
 	ascCount := 0
-	emptyMap.Ascend(func(k int, v string) bool {
+	emptyMap.Ascend(func(_ int, _ string) bool {
 		ascCount++
 		return true
 	})
@@ -361,7 +361,7 @@ func TestConcurrentTreeMap_AscendScenarios(t *testing.T) {
 
 	// Ascend with early termination
 	earlyCount := 0
-	m.Ascend(func(k int, v string) bool {
+	m.Ascend(func(_ int, _ string) bool {
 		earlyCount++
 		return earlyCount < 3 // Stop after 3 iterations
 	})
@@ -408,7 +408,7 @@ func TestConcurrentTreeMap_CoverageSupplement(t *testing.T) {
 
 	// RemoveFunc
 	m.Put(6, "f")
-	removed = m.RemoveFunc(func(k int, v string) bool { return k == 6 })
+	removed = m.RemoveFunc(func(k int, _ string) bool { return k == 6 })
 	require.Equal(t, 1, removed, "Removed count should match expected")
 
 	// Iteration
@@ -417,7 +417,7 @@ func TestConcurrentTreeMap_CoverageSupplement(t *testing.T) {
 
 	// ForEach
 	cnt := 0
-	m.ForEach(func(k int, v string) bool {
+	m.ForEach(func(_ int, _ string) bool {
 		cnt++
 		return true
 	})
@@ -460,27 +460,27 @@ func TestConcurrentTreeMap_CoverageSupplement(t *testing.T) {
 
 	// Ascend, Descend
 	ascCnt := 0
-	m.Ascend(func(k int, v string) bool {
+	m.Ascend(func(_ int, _ string) bool {
 		ascCnt++
 		return true
 	})
 	require.Equal(t, 5, ascCnt, "Sequence should match expected") // 1, 3, 5, 10, 20
 	descCnt := 0
-	m.Descend(func(k int, v string) bool {
+	m.Descend(func(_ int, _ string) bool {
 		descCnt++
 		return true
 	})
 	require.Equal(t, 5, descCnt, "Sequence should match expected")
 
 	// AscendFrom, DescendFrom
-	m.AscendFrom(5, func(k int, v string) bool { return true })
-	m.DescendFrom(5, func(k int, v string) bool { return true })
+	m.AscendFrom(5, func(_ int, _ string) bool { return true })
+	m.DescendFrom(5, func(_ int, _ string) bool { return true })
 
 	// RangeSeq, RangeFrom, RangeTo
 	for range m.RangeSeq(1, 100) {
 	}
-	m.RangeFrom(1, func(k int, v string) bool { return true })
-	m.RangeTo(100, func(k int, v string) bool { return true })
+	m.RangeFrom(1, func(_ int, _ string) bool { return true })
+	m.RangeTo(100, func(_ int, _ string) bool { return true })
 
 	// Reversed
 	for range m.Reversed() {
@@ -493,20 +493,20 @@ func TestConcurrentTreeMap_CoverageSupplement(t *testing.T) {
 	// Merge
 	m.Put(25, "a")
 	// Merge existing
-	v, ok := m.Merge(25, "b", func(old, new string) (string, bool) {
-		return old + new, true
+	v, ok := m.Merge(25, "b", func(old, newValue string) (string, bool) {
+		return old + newValue, true
 	})
 	require.True(t, ok, "Merge should update and return true for existing key")
 	require.Equal(t, "ab", v, "Merge should return merged value for existing key")
 	// Merge existing -> remove
-	_, ok = m.Merge(25, "c", func(old, new string) (string, bool) {
+	_, ok = m.Merge(25, "c", func(_, _ string) (string, bool) {
 		return "", false
 	})
 	require.False(t, ok, "Merge should return false when function indicates removal")
 	require.False(t, m.ContainsKey(25), "Should not contain element")
 	// Merge absent
-	v, ok = m.Merge(30, "new", func(old, new string) (string, bool) {
-		return new, true // shouldn't be called
+	v, ok = m.Merge(30, "new", func(_, newValue string) (string, bool) {
+		return newValue, true // shouldn't be called
 	})
 	require.True(t, ok, "Merge should insert and return true for missing key")
 	require.Equal(t, "new", v, "Merge should return new value for missing key")
@@ -514,19 +514,19 @@ func TestConcurrentTreeMap_CoverageSupplement(t *testing.T) {
 	// ComputeIfPresent
 	m.Put(10, "ten")
 	// Present -> update
-	v, ok = m.ComputeIfPresent(10, func(k int, old string) (string, bool) {
+	v, ok = m.ComputeIfPresent(10, func(_ int, old string) (string, bool) {
 		return old + "_updated", true
 	})
 	require.True(t, ok, "ComputeIfPresent should update and return true for existing key")
 	require.Equal(t, "ten_updated", v, "Compute should return updated value")
 	// Present -> remove
-	_, ok = m.ComputeIfPresent(10, func(k int, old string) (string, bool) {
+	_, ok = m.ComputeIfPresent(10, func(_ int, _ string) (string, bool) {
 		return "", false
 	})
 	require.False(t, ok, "ComputeIfPresent should return false when function indicates removal")
 	require.False(t, m.ContainsKey(10), "Should not contain element")
 	// Absent
-	_, ok = m.ComputeIfPresent(999, func(k int, old string) (string, bool) {
+	_, ok = m.ComputeIfPresent(999, func(_ int, _ string) (string, bool) {
 		return "new", true
 	})
 	require.False(t, ok, "ComputeIfPresent should be false for missing key")
@@ -537,12 +537,12 @@ func TestConcurrentTreeMap_CoverageSupplement(t *testing.T) {
 	require.False(t, m.ReplaceIf(40, "wrong", "xxx", eqV[string]), "ReplaceIf should be false when current value mismatches")
 
 	// ReplaceAll
-	m.ReplaceAll(func(k int, v string) string {
+	m.ReplaceAll(func(_ int, v string) string {
 		return v + "!"
 	})
 	val, _ := m.Get(40)
 	require.Equal(t, "newVal!", val, "ReplaceAll should update stored value")
-	t.Logf("CoverageSupplement finished")
+	t.Log("CoverageSupplement finished")
 	// require.Fail(t, "Force fail to see log")
 }
 
@@ -580,7 +580,7 @@ func TestConcurrentTreeMap_SeqValuesEarlyExit(t *testing.T) {
 			break
 		}
 	}
-	require.Equal(t, 2, len(collected), "SeqValues should support early exit")
+	require.Len(t, collected, 2, "SeqValues should support early exit")
 }
 
 func TestConcurrentTreeMap_RangeFromToEarlyExit(t *testing.T) {
@@ -592,7 +592,7 @@ func TestConcurrentTreeMap_RangeFromToEarlyExit(t *testing.T) {
 
 	// RangeFrom with early exit
 	collected := make([]int, 0)
-	m.RangeFrom(3, func(k, v int) bool {
+	m.RangeFrom(3, func(k, _ int) bool {
 		collected = append(collected, k)
 		return k < 6 // stop when k >= 6
 	})
@@ -600,7 +600,7 @@ func TestConcurrentTreeMap_RangeFromToEarlyExit(t *testing.T) {
 
 	// RangeTo with early exit
 	collected2 := make([]int, 0)
-	m.RangeTo(7, func(k, v int) bool {
+	m.RangeTo(7, func(k, _ int) bool {
 		collected2 = append(collected2, k)
 		return k < 5 // stop when k >= 5
 	})
@@ -616,7 +616,7 @@ func TestConcurrentTreeMap_DescendAscendFromEarlyExit(t *testing.T) {
 
 	// Descend with early exit
 	collected := make([]int, 0)
-	m.Descend(func(k, v int) bool {
+	m.Descend(func(k, _ int) bool {
 		collected = append(collected, k)
 		return k > 5 // stop when k <= 5
 	})
@@ -624,7 +624,7 @@ func TestConcurrentTreeMap_DescendAscendFromEarlyExit(t *testing.T) {
 
 	// AscendFrom with early exit
 	collected2 := make([]int, 0)
-	m.AscendFrom(3, func(k, v int) bool {
+	m.AscendFrom(3, func(k, _ int) bool {
 		collected2 = append(collected2, k)
 		return k < 6 // stop when k >= 6
 	})
@@ -632,7 +632,7 @@ func TestConcurrentTreeMap_DescendAscendFromEarlyExit(t *testing.T) {
 
 	// DescendFrom with early exit
 	collected3 := make([]int, 0)
-	m.DescendFrom(6, func(k, v int) bool {
+	m.DescendFrom(6, func(k, _ int) bool {
 		collected3 = append(collected3, k)
 		return k > 3 // stop when k <= 3
 	})

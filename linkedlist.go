@@ -18,7 +18,7 @@ type node[T any] struct {
 // - O(1) insertion/removal at both ends
 // - O(1) insertion/removal at a known position
 // - O(n) random access by index
-// - O(n) search
+// - O(n) search.
 type linkedList[T any] struct {
 	head *node[T]
 	tail *node[T]
@@ -442,7 +442,7 @@ func (l *linkedList[T]) mergeSort(head *node[T], cmp Comparator[T]) *node[T] {
 }
 
 // merge merges two sorted lists.
-func (l *linkedList[T]) merge(left, right *node[T], cmp Comparator[T]) *node[T] {
+func (*linkedList[T]) merge(left, right *node[T], cmp Comparator[T]) *node[T] {
 	dummy := &node[T]{}
 	curr := dummy
 	for left != nil && right != nil {
@@ -539,7 +539,7 @@ func (l *linkedList[T]) GobDecode(data []byte) error {
 	return nil
 }
 
-// Compile-time conformance
+// Compile-time conformance.
 var (
 	_ List[int] = (*linkedList[int])(nil)
 )

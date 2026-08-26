@@ -733,5 +733,5 @@ func (l *lockFreeList[T]) GobDecode(data []byte) error {
 	return nil
 }
 
-// Compile-time conformance
+// Compile-time conformance.
 var _ List[int] = (*lockFreeList[int])(nil)

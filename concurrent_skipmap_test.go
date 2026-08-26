@@ -122,7 +122,7 @@ func TestConcurrentSkipMap_RangeRankAndViews(t *testing.T) {
 	m.Put(40, 4)
 	// Range
 	rs := make([]int, 0)
-	m.Range(15, 35, func(k, v int) bool {
+	m.Range(15, 35, func(k, _ int) bool {
 		rs = append(rs, k)
 		return true
 	})
@@ -197,7 +197,7 @@ func TestConcurrentSkipMap_RemoveAllAndFunc(t *testing.T) {
 	// RemoveFunc
 	m.Put(4, "d")
 	m.Put(5, "e")
-	count := m.RemoveFunc(func(k int, v string) bool { return k > 3 })
+	count := m.RemoveFunc(func(k int, _ string) bool { return k > 3 })
 	require.Equal(t, 2, count, "Count should match expected")
 	require.Equal(t, 1, m.Size(), "Size should be 1 after RemoveFunc")
 }
@@ -207,7 +207,7 @@ func TestConcurrentSkipMap_ComputeAndMerge(t *testing.T) {
 	m := NewConcurrentSkipMap[int, string]()
 	m.Put(1, "one")
 	// Compute
-	v, ok := m.Compute(1, func(k int, old string, exists bool) (string, bool) {
+	v, ok := m.Compute(1, func(_ int, old string, exists bool) (string, bool) {
 		if exists {
 			return old + "_updated", true
 		}
@@ -216,23 +216,23 @@ func TestConcurrentSkipMap_ComputeAndMerge(t *testing.T) {
 	require.True(t, ok, "Compute should update when key exists and keep=true")
 	require.Equal(t, "one_updated", v, "Compute should return updated value")
 	// ComputeIfAbsent
-	v = m.ComputeIfAbsent(2, func(k int) string { return "two" })
+	v = m.ComputeIfAbsent(2, func(_ int) string { return "two" })
 	require.Equal(t, "two", v, "ComputeIfAbsent should return inserted value")
-	v = m.ComputeIfAbsent(2, func(k int) string { return "two_again" })
+	v = m.ComputeIfAbsent(2, func(_ int) string { return "two_again" })
 	require.Equal(t, "two", v, "ComputeIfAbsent should return existing value") // should not change
 	// ComputeIfPresent
-	v, ok = m.ComputeIfPresent(1, func(k int, old string) (string, bool) {
+	v, ok = m.ComputeIfPresent(1, func(_ int, old string) (string, bool) {
 		return old + "_modified", true
 	})
 	require.True(t, ok, "ComputeIfPresent should update and return true for existing key")
 	require.Equal(t, "one_updated_modified", v, "ComputeIfPresent should return updated value")
 	// Merge
-	v, ok = m.Merge(3, "three", func(old, new string) (string, bool) {
-		return old + "_" + new, true
+	v, ok = m.Merge(3, "three", func(old, newValue string) (string, bool) {
+		return old + "_" + newValue, true
 	})
 	require.True(t, ok, "Merge should insert and return true for missing key")
 	require.Equal(t, "three", v, "Merge should return inserted value for missing key")
-	v, ok = m.Merge(1, "one", func(old, new string) (string, bool) {
+	v, ok = m.Merge(1, "one", func(old, _ string) (string, bool) {
 		return old + "_merged", true
 	})
 	require.True(t, ok, "Merge should update and return true for existing key")
@@ -245,14 +245,14 @@ func TestConcurrentSkipMap_ComputeNotFound(t *testing.T) {
 	m.Put(1, "one")
 
 	// Compute on non-existing key (exists=false, keep=false) -> should do nothing
-	_, ok := m.Compute(99, func(k int, old string, exists bool) (string, bool) {
+	_, ok := m.Compute(99, func(_ int, _ string, _ bool) (string, bool) {
 		return "should_not_be_added", false
 	})
 	require.False(t, ok, "Compute should return false when key doesn't exist and keep=false")
 	require.False(t, m.ContainsKey(99), "New key should not be added when keep=false")
 
 	// Compute on non-existing key (exists=false, keep=true) -> should add
-	v, ok := m.Compute(99, func(k int, old string, exists bool) (string, bool) {
+	v, ok := m.Compute(99, func(_ int, _ string, _ bool) (string, bool) {
 		return "new_value", true
 	})
 	require.True(t, ok, "Compute should return true when key is added")
@@ -266,14 +266,14 @@ func TestConcurrentSkipMap_ComputeIfPresentNotFound(t *testing.T) {
 	m.Put(1, "one")
 
 	// ComputeIfPresent on non-existing key -> should return false
-	_, ok := m.ComputeIfPresent(99, func(k int, old string) (string, bool) {
+	_, ok := m.ComputeIfPresent(99, func(_ int, _ string) (string, bool) {
 		return "new", true
 	})
 	require.False(t, ok, "ComputeIfPresent should return false for non-existing key")
 
 	// ComputeIfPresent with keep=false -> should remove key
 	m.Put(2, "two")
-	_, ok = m.ComputeIfPresent(2, func(k int, old string) (string, bool) {
+	_, ok = m.ComputeIfPresent(2, func(_ int, _ string) (string, bool) {
 		return "", false
 	})
 	require.False(t, ok, "ComputeIfPresent should return false when keep=false")
@@ -295,7 +295,7 @@ func TestConcurrentSkipMap_ReplaceOperations(t *testing.T) {
 	require.True(t, m.ReplaceIf(1, "aa", "aaa", eqV[string]), "ReplaceIf should succeed when current value matches")
 	require.False(t, m.ReplaceIf(1, "wrong", "xxx", eqV[string]), "ReplaceIf should be false when current value mismatches")
 	// ReplaceAll
-	m.ReplaceAll(func(k int, v string) string { return v + "_replaced" })
+	m.ReplaceAll(func(_ int, v string) string { return v + "_replaced" })
 	v, _ = m.Get(1)
 	require.Equal(t, "aaa_replaced", v, "ReplaceAll should update stored value")
 
@@ -336,14 +336,14 @@ func TestConcurrentSkipMap_RangeFromAndTo(t *testing.T) {
 	}
 	// RangeFrom
 	rf := make([]int, 0)
-	m.RangeFrom(3, func(k, v int) bool {
+	m.RangeFrom(3, func(k, _ int) bool {
 		rf = append(rf, k)
 		return true
 	})
 	require.Equal(t, []int{3, 4, 5}, rf, "Slice should match expected")
 	// RangeTo
 	rt := make([]int, 0)
-	m.RangeTo(3, func(k, v int) bool {
+	m.RangeTo(3, func(k, _ int) bool {
 		rt = append(rt, k)
 		return true
 	})
@@ -360,28 +360,28 @@ func TestConcurrentSkipMap_AscendDescend(t *testing.T) {
 	m.Put(4, 40)
 	// Ascend
 	asc := make([]int, 0)
-	m.Ascend(func(k, v int) bool {
+	m.Ascend(func(k, _ int) bool {
 		asc = append(asc, k)
 		return true
 	})
 	require.Equal(t, []int{1, 2, 3, 4, 5}, asc, "Slice should match expected")
 	// Descend
 	desc := make([]int, 0)
-	m.Descend(func(k, v int) bool {
+	m.Descend(func(k, _ int) bool {
 		desc = append(desc, k)
 		return true
 	})
 	require.Equal(t, []int{5, 4, 3, 2, 1}, desc, "Slice should match expected")
 	// AscendFrom
 	af := make([]int, 0)
-	m.AscendFrom(3, func(k, v int) bool {
+	m.AscendFrom(3, func(k, _ int) bool {
 		af = append(af, k)
 		return true
 	})
 	require.Equal(t, []int{3, 4, 5}, af, "Slice should match expected")
 	// DescendFrom
 	df := make([]int, 0)
-	m.DescendFrom(3, func(k, v int) bool {
+	m.DescendFrom(3, func(k, _ int) bool {
 		df = append(df, k)
 		return true
 	})
@@ -415,7 +415,7 @@ func TestConcurrentSkipMap_FilterAndEquals(t *testing.T) {
 	m.Put(2, "b")
 	m.Put(3, "c")
 	// Filter
-	filtered := m.Filter(func(k int, v string) bool { return k > 1 })
+	filtered := m.Filter(func(k int, _ string) bool { return k > 1 })
 	require.Equal(t, 2, filtered.Size(), "Filter should keep two keys greater than 1")
 	// Equals
 	m2 := NewConcurrentSkipMap[int, string]()
@@ -432,7 +432,7 @@ func TestConcurrentSkipMap_FilterAndEquals(t *testing.T) {
 
 func TestConcurrentSkipMap_Races(t *testing.T) {
 	t.Parallel()
-	synctest.Test(t, func(t *testing.T) {
+	synctest.Test(t, func(_ *testing.T) {
 		m := NewConcurrentSkipMap[int, int]()
 		workers := runtime.GOMAXPROCS(0) * 2
 		iters := 500
@@ -448,11 +448,11 @@ func TestConcurrentSkipMap_Races(t *testing.T) {
 					case 2:
 						m.Get(k)
 					default:
-						m.ReplaceAll(func(key, val int) int { return val })
+						m.ReplaceAll(func(_, val int) int { return val })
 					}
 					if i%100 == 0 {
 						count := 0
-						m.Range(-1<<31, 1<<31-1, func(k, v int) bool {
+						m.Range(-1<<31, 1<<31-1, func(_, _ int) bool {
 							if count > 10 {
 								return false
 							}
@@ -528,7 +528,7 @@ func TestConcurrentSkipMap_CoverageSupplement(t *testing.T) {
 
 	// ForEach
 	cnt := 0
-	m.ForEach(func(k int, v string) bool {
+	m.ForEach(func(_ int, _ string) bool {
 		cnt++
 		return true
 	})
@@ -592,12 +592,12 @@ func TestConcurrentSkipMap_Values(t *testing.T) {
 	m.Put(2, "b")
 
 	vals := m.Values()
-	require.Equal(t, 3, len(vals), "Values should return all values")
+	require.Len(t, vals, 3, "Values should return all values")
 	require.Equal(t, []string{"a", "b", "c"}, vals, "Values should be ordered by keys")
 
 	// Empty map
 	empty := NewConcurrentSkipMap[int, string]()
-	require.Equal(t, 0, len(empty.Values()), "Empty map should return empty slice")
+	require.Empty(t, empty.Values(), "Empty map should return empty slice")
 }
 
 func TestConcurrentSkipMap_MergeRemove(t *testing.T) {
@@ -606,15 +606,15 @@ func TestConcurrentSkipMap_MergeRemove(t *testing.T) {
 	m.Put(1, "old")
 
 	// Merge with keep=false should remove the key
-	v, ok := m.Merge(1, "new", func(old, new string) (string, bool) {
+	v, ok := m.Merge(1, "new", func(_, _ string) (string, bool) {
 		return "", false // keep=false
 	})
 	require.False(t, ok, "Merge should return false when keep=false")
-	require.Equal(t, "", v, "Merge should return zero value when keep=false")
+	require.Empty(t, v, "Merge should return zero value when keep=false")
 	require.False(t, m.ContainsKey(1), "Key should be removed when Merge returns keep=false")
 
 	// Merge on non-existing key with keep=false (should insert)
-	v, ok = m.Merge(2, "value", func(old, new string) (string, bool) {
+	v, ok = m.Merge(2, "value", func(_, _ string) (string, bool) {
 		return "", false
 	})
 	require.True(t, ok, "Merge should insert value for non-existing key")
@@ -673,7 +673,7 @@ func TestConcurrentSkipMap_DescendEarlyExit(t *testing.T) {
 
 	// Descend with early exit
 	collected := make([]int, 0)
-	m.Descend(func(k, v int) bool {
+	m.Descend(func(k, _ int) bool {
 		collected = append(collected, k)
 		return k > 2 // stop when k <= 2
 	})
@@ -706,13 +706,13 @@ func TestConcurrentSkipMap_ComputeKeepFalse(t *testing.T) {
 	m.Put(1, "old")
 
 	// Compute with keep=false on existing key (should remove)
-	v, ok := m.Compute(1, func(k int, old string, exists bool) (string, bool) {
+	v, ok := m.Compute(1, func(_ int, old string, exists bool) (string, bool) {
 		require.True(t, exists, "Key should exist")
 		require.Equal(t, "old", old, "Old value should match")
 		return "", false // keep=false
 	})
 	require.False(t, ok, "Compute should return false when keep=false")
-	require.Equal(t, "", v, "Compute should return zero value when keep=false")
+	require.Empty(t, v, "Compute should return zero value when keep=false")
 	require.False(t, m.ContainsKey(1), "Key should be removed when Compute returns keep=false")
 
 	// Verify size decreased
@@ -770,7 +770,7 @@ func TestConcurrentSkipMap_SeqValuesEarlyExit(t *testing.T) {
 			break
 		}
 	}
-	require.Equal(t, 3, len(collected), "SeqValues should support early exit")
+	require.Len(t, collected, 3, "SeqValues should support early exit")
 }
 
 func TestConcurrentSkipMap_ReversedEarlyExit(t *testing.T) {
@@ -800,7 +800,7 @@ func TestConcurrentSkipMap_FoarlyExit(t *testing.T) {
 
 	// ForEach with early exit
 	collected := make([]int, 0)
-	m.ForEach(func(k, v int) bool {
+	m.ForEach(func(k, _ int) bool {
 		collected = append(collected, k)
 		return k < 5 // stop when k >= 5
 	})

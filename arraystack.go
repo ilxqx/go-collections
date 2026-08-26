@@ -131,7 +131,7 @@ func (s *arrayStack[T]) GobDecode(data []byte) error {
 	return dec.Decode(&s.data)
 }
 
-// Compile-time conformance
+// Compile-time conformance.
 var (
 	_ Stack[int] = (*arrayStack[int])(nil)
 )

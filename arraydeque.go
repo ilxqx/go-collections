@@ -178,7 +178,7 @@ func (d *arrayDeque[T]) at(i int) T {
 }
 
 // mod wraps n within [0,m).
-func (d *arrayDeque[T]) mod(n, m int) int {
+func (*arrayDeque[T]) mod(n, m int) int {
 	if m == 0 {
 		return 0
 	}
@@ -246,7 +246,7 @@ func (d *arrayDeque[T]) GobDecode(data []byte) error {
 	return nil
 }
 
-// Compile-time conformance
+// Compile-time conformance.
 var (
 	_ Deque[int] = (*arrayDeque[int])(nil)
 )

@@ -457,7 +457,7 @@ func (s *concurrentHashSet[T]) GobDecode(data []byte) error {
 	return nil
 }
 
-// Conformance
+// Conformance.
 var (
 	_ ConcurrentSet[int] = (*concurrentHashSet[int])(nil)
 )

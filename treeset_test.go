@@ -37,14 +37,14 @@ func TestTreeSet_BasicAndOrder(t *testing.T) {
 	for v := range s.Reversed() {
 		dec = append(dec, v)
 	}
-	assert.Equal(t, 3, len(dec), "Reversed should yield three elements")
+	assert.Len(t, dec, 3, "Reversed should yield three elements")
 	assert.Equal(t, 3, dec[0], "Reversed first element should be max")
 	assert.Equal(t, 1, dec[2], "Reversed last element should be min")
 }
 
 func TestTreeSet_NavigationAndExtremes(t *testing.T) {
 	t.Parallel()
-	s := NewTreeSet(func(a, b int) int { return cmp.Compare(a, b) })
+	s := NewTreeSet(cmp.Compare[int])
 	s.AddAll(10, 20, 30, 40)
 	v, ok := s.First()
 	require.True(t, ok, "First should succeed on non-empty set")
@@ -181,7 +181,7 @@ func TestTreeSet_AscendDescend(t *testing.T) {
 
 	// Test early termination
 	count := 0
-	s.Ascend(func(e int) bool {
+	s.Ascend(func(_ int) bool {
 		count++
 		return count < 3
 	})
@@ -211,7 +211,7 @@ func TestTreeSet_CoverageSupplement(t *testing.T) {
 
 	// ForEach
 	cnt := 0
-	s.ForEach(func(e int) bool {
+	s.ForEach(func(_ int) bool {
 		cnt++
 		return true
 	})
@@ -252,7 +252,7 @@ func TestTreeSet_CoverageSupplement(t *testing.T) {
 	s.AddAll(10, 11)
 	// Only retain > 5 (should remove existing small elements)
 	removed = s.RetainFunc(func(e int) bool { return e > 5 })
-	assert.Greater(t, removed, 0, "Value should be greater than expected")
+	assert.Positive(t, removed, "Value should be greater than expected")
 	assert.True(t, s.ContainsAll(10, 11), "ContainsAll should be true for expected elements")
 	assert.False(t, s.Contains(2), "Should not contain element") // was present before
 
@@ -423,7 +423,7 @@ func TestTreeSet_RangeSeqEarlyExit(t *testing.T) {
 	for v := range s.RangeSeq(8, 2) {
 		empty = append(empty, v)
 	}
-	require.Equal(t, 0, len(empty), "RangeSeq should return empty when from > to")
+	require.Empty(t, empty, "RangeSeq should return empty when from > to")
 }
 
 func TestTreeSet_FirstLastEntry(t *testing.T) {
@@ -522,7 +522,7 @@ func TestTreeSet_RangeReversed(t *testing.T) {
 		collected = append(collected, e)
 		return true
 	})
-	require.Equal(t, 0, len(collected), "Range should return empty when from > to")
+	require.Empty(t, collected, "Range should return empty when from > to")
 }
 
 func TestTreeSet_SubSetReversed(t *testing.T) {

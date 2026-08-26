@@ -384,7 +384,7 @@ func NewConcurrentSkipSetFrom[T Ordered](elements ...T) ConcurrentSortedSet[T]
 | `ComputeIfPresent(key K, remapping func(K, V) (V, bool)) (V, bool)` | Recomputes if present |
 | `Merge(key K, value V, remapping func(V, V) (V, bool)) (V, bool)` | Merges with existing |
 | `Replace(key K, value V) (V, bool)` | Replaces if present |
-| `ReplaceIf(key K, old, new V, eq Equaler[V]) bool` | Replaces if value matches |
+| `ReplaceIf(key K, oldValue, newValue V, eq Equaler[V]) bool` | Replaces if value matches |
 | `ReplaceAll(function func(K, V) V)` | Replaces all values |
 | `Keys() []K` | Returns all keys |
 | `Values() []V` | Returns all values |
@@ -534,7 +534,7 @@ func NewConcurrentHashMapFrom[K comparable, V any](src map[K]V) ConcurrentMap[K,
 | `GetOrCompute(key K, compute func() V) (V, bool)` | Atomically get or compute |
 | `RemoveAndGet(key K) (V, bool)` | Atomically removes and returns |
 | `PutIfAbsent(key K, value V) (V, bool)` | Atomically stores if absent |
-| `CompareAndSwap(key K, old, new V, eq Equaler[V]) bool` | Atomic CAS |
+| `CompareAndSwap(key K, oldValue, newValue V, eq Equaler[V]) bool` | Atomic CAS |
 | `CompareAndDelete(key K, value V, eq Equaler[V]) bool` | Atomic compare-and-delete |
 
 **Example:**
@@ -626,7 +626,7 @@ func NewConcurrentSkipMapFrom[K Ordered, V any](src map[K]V) ConcurrentSortedMap
 | `Reversed() iter.Seq[T]` | Returns reverse sequence |
 | `Clone() List[T]` | Returns shallow copy |
 | `Filter(predicate func(T) bool) List[T]` | Returns filtered list |
-| `Sort(cmp Comparator[T])` | Sorts in place |
+| `Sort(comparator Comparator[T])` | Sorts in place |
 | `Any(predicate func(T) bool) bool` | Returns true if any match |
 | `Every(predicate func(T) bool) bool` | Returns true if all match |
 

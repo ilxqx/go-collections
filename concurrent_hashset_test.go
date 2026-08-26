@@ -11,7 +11,7 @@ import (
 )
 
 func TestConcurrentHashSet_Basic(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 	s := NewConcurrentHashSet[int]()
 	assert.True(t, s.IsEmpty(), "New set should be empty")
 	assert.True(t, s.Add(1), "Add should succeed for new element")
@@ -27,13 +27,13 @@ t.Parallel()
 }
 
 func TestConcurrentHashSet_ConcurrentAddIfAbsent(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		s := NewConcurrentHashSet[int]()
 		n := 1000
 		workers := runtime.GOMAXPROCS(0) * 2
 		for w := range workers {
-			go func(id int) {
+			go func(_ int) {
 				for i := range n {
 					s.AddIfAbsent(i)
 				}
@@ -48,7 +48,7 @@ t.Parallel()
 }
 
 func TestConcurrentHashSet_Algebra(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 	a := NewConcurrentHashSetFrom(1, 2, 3, 4)
 	b := NewConcurrentHashSetFrom(3, 4, 5)
 
@@ -64,23 +64,19 @@ t.Parallel()
 	// SymmetricDifference
 	sd := a.SymmetricDifference(b).ToSlice()
 
-	expectContains := func(slice []int, x int) bool {
-		return slices.Contains(slice, x)
-	}
-
-	assert.Truef(t, expectContains(u, 1) && expectContains(u, 5), "Union unexpected: %v", u)
+	assert.Truef(t, slices.Contains(u, 1) && slices.Contains(u, 5), "Union unexpected: %v", u)
 	assert.Len(t, i, 2, "Intersection unexpected: %v", i)
-	assert.True(t, expectContains(i, 3) && expectContains(i, 4), "Contains should be true for expected element")
+	assert.True(t, slices.Contains(i, 3) && slices.Contains(i, 4), "Contains should be true for expected element")
 
 	assert.Len(t, d, 2, "Difference unexpected: %v", d)
-	assert.True(t, expectContains(d, 1) && expectContains(d, 2), "Contains should be true for expected element")
+	assert.True(t, slices.Contains(d, 1) && slices.Contains(d, 2), "Contains should be true for expected element")
 
 	assert.Len(t, sd, 3, "SymmetricDifference unexpected: %v", sd)
-	assert.True(t, expectContains(sd, 1) && expectContains(sd, 2) && expectContains(sd, 5), "Contains should be true for expected element")
+	assert.True(t, slices.Contains(sd, 1) && slices.Contains(sd, 2) && slices.Contains(sd, 5), "Contains should be true for expected element")
 }
 
 func TestConcurrentHashSet_ClearAndSize(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 	s := NewConcurrentHashSetFrom(1, 2, 3)
 	assert.False(t, s.IsEmpty(), "IsEmpty should be false")
 	assert.Equal(t, 3, s.Size(), "Size should be 3 before Clear")
@@ -100,7 +96,7 @@ t.Parallel()
 }
 
 func TestConcurrentHashSet_PopAndRemove(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 	s := NewConcurrentHashSetFrom(1, 2, 3)
 	// Pop returns arbitrary element that is removed
 	v, ok := s.Pop()
@@ -120,7 +116,7 @@ t.Parallel()
 }
 
 func TestConcurrentHashSet_AddAndRemoveAll(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 	s := NewConcurrentHashSet[int]()
 
 	// AddAll
@@ -162,7 +158,7 @@ t.Parallel()
 }
 
 func TestConcurrentHashSet_ContainsOperations(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 	s := NewConcurrentHashSetFrom(1, 2, 3)
 
 	// ContainsAll
@@ -175,7 +171,7 @@ t.Parallel()
 }
 
 func TestConcurrentHashSet_SubsetSuperset(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 	s1 := NewConcurrentHashSetFrom(1, 2)
 	s2 := NewConcurrentHashSetFrom(1, 2, 3)
 	s3 := NewConcurrentHashSetFrom(2, 3)
@@ -202,7 +198,7 @@ t.Parallel()
 }
 
 func TestConcurrentHashSet_CloneFilterEquals(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 	s := NewConcurrentHashSetFrom(1, 2, 3)
 
 	// Clone
@@ -223,12 +219,12 @@ t.Parallel()
 }
 
 func TestConcurrentHashSet_IteratorsAndPredicates(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 	s := NewConcurrentHashSetFrom(1, 2, 3, 4, 5)
 
 	// ForEach
 	cnt := 0
-	s.ForEach(func(e int) bool {
+	s.ForEach(func(_ int) bool {
 		cnt++
 		return true
 	})

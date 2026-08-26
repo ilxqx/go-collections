@@ -120,7 +120,7 @@ func TestPriorityQueue_ToSlice(t *testing.T) {
 	pq := NewPriorityQueueFrom(CompareFunc[int](), 5, 3, 1, 4, 2)
 
 	slice := pq.ToSlice()
-	assert.Equal(t, 5, len(slice), "ToSlice should return all elements")
+	assert.Len(t, slice, 5, "ToSlice should return all elements")
 	// ToSlice returns heap order, not sorted
 }
 
@@ -140,7 +140,7 @@ func TestPriorityQueue_Seq(t *testing.T) {
 	for v := range pq.Seq() {
 		collected = append(collected, v)
 	}
-	assert.Equal(t, 3, len(collected), "Seq should iterate all elements")
+	assert.Len(t, collected, 3, "Seq should iterate all elements")
 }
 
 func TestPriorityQueue_String(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"cmp"
 	"encoding/gob"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"iter"
 	"slices"
 	"sync"
@@ -30,7 +30,7 @@ func NewConcurrentTreeSet[T any](cmpT Comparator[T]) ConcurrentSortedSet[T] {
 
 // NewConcurrentTreeSetOrdered creates an empty set for Ordered types.
 func NewConcurrentTreeSetOrdered[T Ordered]() ConcurrentSortedSet[T] {
-	return NewConcurrentTreeSet(func(a, b T) int { return cmp.Compare(a, b) })
+	return NewConcurrentTreeSet(cmp.Compare[T])
 }
 
 // NewConcurrentTreeSetFrom creates a set and inserts the given elements.
@@ -627,8 +627,8 @@ func (c *concurrentTreeSet[T]) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON implements json.Unmarshaler.
 // Returns an error because ConcurrentTreeSet requires a comparator.
 // Use UnmarshalTreeSetOrderedJSON or UnmarshalTreeSetJSON instead.
-func (c *concurrentTreeSet[T]) UnmarshalJSON(data []byte) error {
-	return fmt.Errorf("cannot unmarshal ConcurrentTreeSet directly: use UnmarshalTreeSetOrderedJSON[T]() for Ordered types or UnmarshalTreeSetJSON[T](data, comparator) for custom comparators, then wrap with NewConcurrentTreeSet")
+func (*concurrentTreeSet[T]) UnmarshalJSON(_ []byte) error {
+	return errors.New("cannot unmarshal ConcurrentTreeSet directly: use UnmarshalTreeSetOrderedJSON[T]() for Ordered types or UnmarshalTreeSetJSON[T](data, comparator) for custom comparators, then wrap with NewConcurrentTreeSet")
 }
 
 // GobEncode implements gob.GobEncoder.
@@ -652,11 +652,11 @@ func (c *concurrentTreeSet[T]) GobEncode() ([]byte, error) {
 // GobDecode implements gob.GobDecoder.
 // Returns an error because ConcurrentTreeSet requires a comparator.
 // Use UnmarshalTreeSetOrderedGob or UnmarshalTreeSetGob instead.
-func (c *concurrentTreeSet[T]) GobDecode(data []byte) error {
-	return fmt.Errorf("cannot unmarshal ConcurrentTreeSet directly: use UnmarshalTreeSetOrderedGob[T]() for Ordered types or UnmarshalTreeSetGob[T](data, comparator) for custom comparators, then wrap with NewConcurrentTreeSet")
+func (*concurrentTreeSet[T]) GobDecode(_ []byte) error {
+	return errors.New("cannot unmarshal ConcurrentTreeSet directly: use UnmarshalTreeSetOrderedGob[T]() for Ordered types or UnmarshalTreeSetGob[T](data, comparator) for custom comparators, then wrap with NewConcurrentTreeSet")
 }
 
-// Conformance
+// Conformance.
 var (
 	_ ConcurrentSortedSet[int] = (*concurrentTreeSet[int])(nil)
 )

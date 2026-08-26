@@ -5,7 +5,7 @@ import (
 	"cmp"
 	"encoding/gob"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"iter"
 	"slices"
 	"sync"
@@ -29,7 +29,7 @@ func NewConcurrentTreeMap[K any, V any](cmpK Comparator[K]) ConcurrentSortedMap[
 
 // NewConcurrentTreeMapOrdered creates an empty map for Ordered keys.
 func NewConcurrentTreeMapOrdered[K Ordered, V any]() ConcurrentSortedMap[K, V] {
-	return NewConcurrentTreeMap[K, V](func(a, b K) int { return cmp.Compare(a, b) })
+	return NewConcurrentTreeMap[K, V](cmp.Compare)
 }
 
 // NewConcurrentTreeMapFrom creates a map populated from a standard Go map.
@@ -386,11 +386,11 @@ func (c *concurrentTreeMap[K, V]) RemoveAndGet(key K) (V, bool) {
 }
 
 // CompareAndSwap atomically replaces value if current equals old.
-func (c *concurrentTreeMap[K, V]) CompareAndSwap(key K, old, new V, eq Equaler[V]) bool {
+func (c *concurrentTreeMap[K, V]) CompareAndSwap(key K, oldValue, newValue V, eq Equaler[V]) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if cur, ok := c.tm.Get(key); ok && eq(cur, old) {
-		c.tm.Put(key, new)
+	if cur, ok := c.tm.Get(key); ok && eq(cur, oldValue) {
+		c.tm.Put(key, newValue)
 		return true
 	}
 	return false
@@ -680,8 +680,8 @@ func (c *concurrentTreeMap[K, V]) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON implements json.Unmarshaler.
 // Returns an error because ConcurrentTreeMap requires a comparator.
 // Use UnmarshalTreeMapOrderedJSON or UnmarshalTreeMapJSON instead.
-func (c *concurrentTreeMap[K, V]) UnmarshalJSON(data []byte) error {
-	return fmt.Errorf("cannot unmarshal ConcurrentTreeMap directly: use UnmarshalTreeMapOrderedJSON[K, V]() for Ordered key types or UnmarshalTreeMapJSON[K, V](data, comparator) for custom comparators, then wrap with NewConcurrentTreeMap")
+func (*concurrentTreeMap[K, V]) UnmarshalJSON(_ []byte) error {
+	return errors.New("cannot unmarshal ConcurrentTreeMap directly: use UnmarshalTreeMapOrderedJSON[K, V]() for Ordered key types or UnmarshalTreeMapJSON[K, V](data, comparator) for custom comparators, then wrap with NewConcurrentTreeMap")
 }
 
 // GobEncode implements gob.GobEncoder.
@@ -713,11 +713,11 @@ func (c *concurrentTreeMap[K, V]) GobEncode() ([]byte, error) {
 // GobDecode implements gob.GobDecoder.
 // Returns an error because ConcurrentTreeMap requires a comparator.
 // Use UnmarshalTreeMapOrderedGob or UnmarshalTreeMapGob instead.
-func (c *concurrentTreeMap[K, V]) GobDecode(data []byte) error {
-	return fmt.Errorf("cannot unmarshal ConcurrentTreeMap directly: use UnmarshalTreeMapOrderedGob[K, V]() for Ordered key types or UnmarshalTreeMapGob[K, V](data, comparator) for custom comparators, then wrap with NewConcurrentTreeMap")
+func (*concurrentTreeMap[K, V]) GobDecode(_ []byte) error {
+	return errors.New("cannot unmarshal ConcurrentTreeMap directly: use UnmarshalTreeMapOrderedGob[K, V]() for Ordered key types or UnmarshalTreeMapGob[K, V](data, comparator) for custom comparators, then wrap with NewConcurrentTreeMap")
 }
 
-// Conformance
+// Conformance.
 var (
 	_ ConcurrentSortedMap[int, string] = (*concurrentTreeMap[int, string])(nil)
 )

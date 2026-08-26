@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// helper to make a Seq from slice
+// helper to make a Seq from slice.
 func seqOf[T any](vals []T) func(func(T) bool) {
 	return func(yield func(T) bool) {
 		for _, v := range vals {
@@ -69,7 +69,7 @@ func TestHashSet_SeqForEach(t *testing.T) {
 	slices.Sort(collected)
 	assert.True(t, slices.Equal(collected, []int{1, 2, 3, 4}), "Seq collected=%v", collected)
 	n := 0
-	s.ForEach(func(v int) bool {
+	s.ForEach(func(_ int) bool {
 		n++
 		return false // stop immediately
 	})

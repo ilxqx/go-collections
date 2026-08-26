@@ -69,7 +69,7 @@ func TestArrayQueue_ToSlice(t *testing.T) {
 	t.Parallel()
 	q := NewArrayQueueFrom(1, 2, 3)
 	slice := q.ToSlice()
-	assert.Equal(t, 3, len(slice), "ToSlice should return 3 elements")
+	assert.Len(t, slice, 3, "ToSlice should return 3 elements")
 	assert.Equal(t, 1, slice[0], "Front element should be first in slice")
 	assert.Equal(t, 3, slice[2], "Back element should be last in slice")
 }
@@ -121,7 +121,8 @@ func TestArrayQueue_ShrinkAfterPeak(t *testing.T) {
 	t.Parallel()
 	// Test the shrink strategy: when head > 3/4 cap and live < 1/4 cap,
 	// the capacity should shrink to release memory.
-	q := NewArrayQueue[int]().(*arrayQueue[int])
+	q, ok := NewArrayQueue[int]().(*arrayQueue[int])
+	require.True(t, ok, "NewArrayQueue should return *arrayQueue")
 
 	// Enqueue a large number of elements to create peak capacity
 	const peakSize = 1000
@@ -156,7 +157,8 @@ func TestArrayQueue_ShrinkTriggersReallocation(t *testing.T) {
 	t.Parallel()
 	// Test that shrink behavior triggers reallocation and subsequent
 	// enqueue/dequeue operations have stable performance.
-	q := NewArrayQueue[int]().(*arrayQueue[int])
+	q, ok := NewArrayQueue[int]().(*arrayQueue[int])
+	require.True(t, ok, "NewArrayQueue should return *arrayQueue")
 
 	// Build up to a large capacity
 	const peakSize = 500
@@ -203,7 +205,8 @@ func TestArrayQueue_ShrinkTriggersReallocation(t *testing.T) {
 func TestArrayQueue_ShrinkDoesNotThrashOnSmallQueues(t *testing.T) {
 	t.Parallel()
 	// Verify that small queues don't shrink (capacity <= 64 threshold)
-	q := NewArrayQueue[int]().(*arrayQueue[int])
+	q, ok := NewArrayQueue[int]().(*arrayQueue[int])
+	require.True(t, ok, "NewArrayQueue should return *arrayQueue")
 
 	// Use a small queue
 	for i := range 50 {
@@ -243,7 +246,8 @@ func TestArrayQueue_ShrinkReducesAllocations(t *testing.T) {
 
 	// Scenario: Build up to peak, drain to trigger shrink, then steady-state ops
 	allocs := testing.AllocsPerRun(10, func() {
-		q := NewArrayQueue[int]().(*arrayQueue[int])
+		q, ok := NewArrayQueue[int]().(*arrayQueue[int])
+		require.True(t, ok, "NewArrayQueue should return *arrayQueue")
 
 		// Phase 1: Build up to peak capacity
 		for i := range peakSize {

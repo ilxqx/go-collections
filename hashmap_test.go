@@ -1,14 +1,14 @@
 package collections
 
 import (
+	"cmp"
 	"slices"
-	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-// helper to make a Seq2 from slices of keys/values (same length)
+// helper to make a Seq2 from slices of keys/values (same length).
 func seq2Of[K any, V any](keys []K, values []V) func(func(K, V) bool) {
 	return func(yield func(K, V) bool) {
 		for i := range keys {
@@ -33,7 +33,7 @@ func TestHashMap_BasicCRUD(t *testing.T) {
 	require.Equal(t, "x", m.GetOrDefault(1, "x"), "GetOrDefault should return fallback")
 	old, replaced := m.Put(1, "a")
 	require.False(t, replaced, "First Put should not report replaced")
-	require.Equal(t, "", old, "Old value should be zero on first Put")
+	require.Empty(t, old, "Old value should be zero on first Put")
 	old, replaced = m.Put(1, "b")
 	require.True(t, replaced, "Second Put should report replaced")
 	require.Equal(t, "a", old, "Old value should be returned")
@@ -80,13 +80,13 @@ func TestHashMap_Contains_Views_Iter(t *testing.T) {
 	slices.Sort(vs)
 	require.True(t, slices.Equal(vs, []string{"a", "b"}), "Values=%v", vs)
 	es := m.Entries()
-	sort.Slice(es, func(i, j int) bool { return es[i].Key < es[j].Key })
+	slices.SortFunc(es, func(a, b Entry[int, string]) int { return cmp.Compare(a.Key, b.Key) })
 	require.Len(t, es, 2, "Entries length should be 2")
 	require.Equal(t, 1, es[0].Key, "First entry should have smallest key")
 	require.Equal(t, 2, es[1].Key, "Second entry should have largest key")
 	// ForEach early stop
 	cnt := 0
-	m.ForEach(func(k int, v string) bool {
+	m.ForEach(func(_ int, _ string) bool {
 		cnt++
 		return false // stop immediately
 	})
@@ -120,31 +120,31 @@ func TestHashMap_ComputeVariants(t *testing.T) {
 	require.Equal(t, 10, v, "ComputeIfAbsent should compute value from key")
 	require.Equal(t, 1, m.Size(), "Size should be 1 after ComputeIfAbsent")
 	// Compute existing -> update
-	nv, ok := m.Compute(1, func(k, old int, exists bool) (int, bool) {
+	nv, ok := m.Compute(1, func(_, old int, exists bool) (int, bool) {
 		require.True(t, exists, "Exists expected true")
 		return old + 1, true
 	})
 	require.True(t, ok, "Compute should keep key when keep=true")
 	require.Equal(t, 11, nv, "Compute should update value")
 	// Compute remove
-	_, ok = m.Compute(1, func(k, old int, exists bool) (int, bool) {
+	_, ok = m.Compute(1, func(_, _ int, _ bool) (int, bool) {
 		return 0, false
 	})
 	require.False(t, ok, "Compute should report removed when keep=false")
 	require.False(t, m.ContainsKey(1), "Key should be removed after keep=false")
 	// ComputeIfPresent on absent
-	_, ok = m.ComputeIfPresent(1, func(k, old int) (int, bool) { return 0, true })
+	_, ok = m.ComputeIfPresent(1, func(_, _ int) (int, bool) { return 0, true })
 	require.False(t, ok, "ComputeIfPresent should be false on absent")
 	// Merge
 	m.Put(2, 5)
-	nv, ok = m.Merge(2, 7, func(old, new int) (int, bool) { return old + new, true })
+	nv, ok = m.Merge(2, 7, func(old, newValue int) (int, bool) { return old + newValue, true })
 	require.True(t, ok, "Merge should keep key when keep=true")
 	require.Equal(t, 12, nv, "Merge should combine values")
-	_, ok = m.Merge(2, 0, func(old, new int) (int, bool) { return 0, false })
+	_, ok = m.Merge(2, 0, func(_, _ int) (int, bool) { return 0, false })
 	require.False(t, ok, "Merge should remove when keep=false")
 	require.False(t, m.ContainsKey(2), "Key should be removed by Merge keep=false")
 	// Merge on absent
-	v, ok = m.Merge(3, 30, func(old, new int) (int, bool) { return old + new, true })
+	v, ok = m.Merge(3, 30, func(old, newValue int) (int, bool) { return old + newValue, true })
 	require.True(t, ok, "Merge on absent should insert")
 	require.Equal(t, 30, v, "Merge on absent should return inserted value")
 }
@@ -160,7 +160,7 @@ func TestHashMap_ReplaceAndFilterAndEquals(t *testing.T) {
 	require.False(t, m.ReplaceIf(2, "x", "bb", eqV[string]), "ReplaceIf should fail on mismatched oldValue")
 	require.True(t, m.ReplaceIf(2, "b", "bb", eqV[string]), "ReplaceIf should succeed when current value matches")
 	// ReplaceAll
-	m.ReplaceAll(func(k int, v string) string { return v + "!" })
+	m.ReplaceAll(func(_ int, v string) string { return v + "!" })
 	require.True(t, m.ContainsValue("aa!", eqV[string]), "ReplaceAll should update values")
 	require.True(t, m.ContainsValue("bb!", eqV[string]), "ReplaceAll should update values")
 	// Clone
@@ -168,7 +168,7 @@ func TestHashMap_ReplaceAndFilterAndEquals(t *testing.T) {
 	require.True(t, m.Equals(cp, eqV[string]), "Clone should be equal to original")
 	require.True(t, cp.Equals(m, eqV[string]), "Equality should be symmetric")
 	// Filter
-	f := m.Filter(func(k int, v string) bool { return k == 1 })
+	f := m.Filter(func(k int, _ string) bool { return k == 1 })
 	require.Equal(t, 1, f.Size(), "Filter should keep one key")
 	require.True(t, f.ContainsKey(1), "Filter result should contain kept key")
 	// ToGoMap is a snapshot (available via GoMapView)
@@ -187,7 +187,7 @@ func TestHashMap_EmptySingle(t *testing.T) {
 	require.False(t, ok, "Remove on absent key should be false")
 	old, replaced := m.Put(1, "a")
 	require.False(t, replaced, "First Put should not replace")
-	require.Equal(t, "", old, "Old value should be zero on first Put")
+	require.Empty(t, old, "Old value should be zero on first Put")
 	v, ok := m.Get(1)
 	require.True(t, ok, "Get should succeed for existing key")
 	require.Equal(t, "a", v, "Get should return stored value")
@@ -229,7 +229,7 @@ func TestHashMap_PutAll(t *testing.T) {
 func TestHashMap_RemoveFunc(t *testing.T) {
 	t.Parallel()
 	m := NewHashMapFrom(map[int]string{1: "a", 2: "b", 3: "c"})
-	count := m.RemoveFunc(func(k int, v string) bool { return k > 1 })
+	count := m.RemoveFunc(func(k int, _ string) bool { return k > 1 })
 	require.Equal(t, 2, count, "RemoveFunc should remove keys > 1")
 	require.Equal(t, 1, m.Size(), "Size should reflect removals")
 	require.True(t, m.ContainsKey(1), "Key 1 should remain")
@@ -318,7 +318,7 @@ func TestHashMap_ComputeIfPresent(t *testing.T) {
 	m := NewHashMap[int, string]()
 
 	// Test on absent key - should return (zero, false)
-	_, ok := m.ComputeIfPresent(1, func(k int, old string) (string, bool) {
+	_, ok := m.ComputeIfPresent(1, func(_ int, _ string) (string, bool) {
 		return "new", true
 	})
 	require.False(t, ok, "ComputeIfPresent should return false for absent key")
@@ -326,7 +326,7 @@ func TestHashMap_ComputeIfPresent(t *testing.T) {
 
 	// Test on existing key - keep=true (update)
 	m.Put(1, "old")
-	newVal, ok := m.ComputeIfPresent(1, func(k int, old string) (string, bool) {
+	newVal, ok := m.ComputeIfPresent(1, func(_ int, _ string) (string, bool) {
 		return "updated", true
 	})
 	require.True(t, ok, "ComputeIfPresent should return true when key exists")
@@ -335,7 +335,7 @@ func TestHashMap_ComputeIfPresent(t *testing.T) {
 	require.Equal(t, "updated", v, "Value should be updated")
 
 	// Test on existing key - keep=false (remove)
-	_, ok = m.ComputeIfPresent(1, func(k int, old string) (string, bool) {
+	_, ok = m.ComputeIfPresent(1, func(_ int, _ string) (string, bool) {
 		return "", false
 	})
 	require.False(t, ok, "ComputeIfPresent should return false when key is removed")
@@ -344,10 +344,10 @@ func TestHashMap_ComputeIfPresent(t *testing.T) {
 	// Test multiple updates
 	m.Put(2, "a")
 	m.Put(3, "b")
-	_, _ = m.ComputeIfPresent(2, func(k int, old string) (string, bool) {
+	_, _ = m.ComputeIfPresent(2, func(_ int, _ string) (string, bool) {
 		return "aa", true
 	})
-	_, _ = m.ComputeIfPresent(3, func(k int, old string) (string, bool) {
+	_, _ = m.ComputeIfPresent(3, func(_ int, _ string) (string, bool) {
 		return "bb", true
 	})
 	v2, _ := m.Get(2)

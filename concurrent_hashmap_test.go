@@ -18,7 +18,7 @@ func TestConcurrentHashMap_Basic(t *testing.T) {
 	require.False(t, ok, "Unexpected key should not be present")
 	old, replaced := m.Put(1, "a")
 	require.False(t, replaced, "Put should report no replacement for new key")
-	assert.Equal(t, "", old, "Put should return zero value for new key")
+	assert.Empty(t, old, "Put should return zero value for new key")
 	v, ok := m.Get(1)
 	require.True(t, ok, "Get should succeed for existing key")
 	assert.Equal(t, "a", v, "Get should return stored value")
@@ -58,7 +58,7 @@ func TestConcurrentHashMap_ConcurrentPutIfAbsent(t *testing.T) {
 		n := 1000
 		workers := runtime.GOMAXPROCS(0) * 2
 		for w := range workers {
-			go func(id int) {
+			go func(_ int) {
 				for i := range n {
 					m.PutIfAbsent(i, i)
 				}
@@ -169,7 +169,7 @@ func TestConcurrentHashMap_ContainsAndRemoveAll(t *testing.T) {
 	m.Put(1, "a")
 	m.Put(2, "b")
 	m.Put(3, "c")
-	count = m.RemoveFunc(func(k int, v string) bool {
+	count = m.RemoveFunc(func(k int, _ string) bool {
 		return k%2 != 0 // remove odd keys: 1, 3
 	})
 	assert.Equal(t, 2, count, "Count should match expected")
@@ -182,14 +182,14 @@ func TestConcurrentHashMap_ComputeAndMerge(t *testing.T) {
 	m := NewConcurrentHashMap[int, int]()
 
 	// Compute
-	v, ok := m.Compute(1, func(k int, old int, exists bool) (int, bool) {
+	v, ok := m.Compute(1, func(_ int, _ int, exists bool) (int, bool) {
 		assert.False(t, exists, "Exists should be false for first Compute on key 1")
 		return 10, true
 	})
 	require.True(t, ok, "Compute should insert when key is absent and keep=true")
 	assert.Equal(t, 10, v, "Sequence should match expected")
 
-	v, ok = m.Compute(1, func(k int, old int, exists bool) (int, bool) {
+	v, ok = m.Compute(1, func(_ int, old int, exists bool) (int, bool) {
 		assert.True(t, exists, "Exists should be true for subsequent Compute on key 1")
 		return old + 5, true
 	})
@@ -197,30 +197,30 @@ func TestConcurrentHashMap_ComputeAndMerge(t *testing.T) {
 	assert.Equal(t, 15, v, "Sequence should match expected")
 
 	// Compute: delete
-	_, ok = m.Compute(1, func(k int, old int, exists bool) (int, bool) {
+	_, ok = m.Compute(1, func(_ int, _ int, _ bool) (int, bool) {
 		return 0, false
 	})
 	require.False(t, ok, "Compute should report removed when keep=false")
 	assert.False(t, m.ContainsKey(1), "Should not contain element")
 
 	// ComputeIfAbsent
-	v = m.ComputeIfAbsent(2, func(k int) int { return 20 })
+	v = m.ComputeIfAbsent(2, func(_ int) int { return 20 })
 	assert.Equal(t, 20, v, "Sequence should match expected")
-	v = m.ComputeIfAbsent(2, func(k int) int { return 999 }) // should not update
+	v = m.ComputeIfAbsent(2, func(_ int) int { return 999 }) // should not update
 	assert.Equal(t, 20, v, "Sequence should match expected")
 
 	// ComputeIfPresent
-	v, ok = m.ComputeIfPresent(2, func(k int, old int) (int, bool) {
+	v, ok = m.ComputeIfPresent(2, func(_ int, old int) (int, bool) {
 		return old * 2, true
 	})
 	require.True(t, ok, "ComputeIfPresent should update and return true for existing key")
 	assert.Equal(t, 40, v, "Sequence should match expected")
 
-	_, ok = m.ComputeIfPresent(3, func(k int, old int) (int, bool) { return 0, true })
+	_, ok = m.ComputeIfPresent(3, func(_ int, _ int) (int, bool) { return 0, true })
 	require.False(t, ok, "ComputeIfPresent should be false for missing key")
 
 	// ComputeIfPresent: delete
-	_, ok = m.ComputeIfPresent(2, func(k int, old int) (int, bool) {
+	_, ok = m.ComputeIfPresent(2, func(_ int, _ int) (int, bool) {
 		return 0, false
 	})
 	require.False(t, ok, "ComputeIfPresent should be false when function indicates removal")
@@ -234,12 +234,12 @@ func TestConcurrentHashMap_ComputeAndMerge(t *testing.T) {
 	require.True(t, ok, "Merge should update and return true for existing key")
 	assert.Equal(t, 30, v, "Sequence should match expected")
 
-	v, ok = m.Merge(5, 50, func(old, newV int) (int, bool) { return 0, true }) // key absent
+	v, ok = m.Merge(5, 50, func(_, _ int) (int, bool) { return 0, true }) // key absent
 	require.True(t, ok, "Merge should insert and return true for missing key")
 	assert.Equal(t, 50, v, "Sequence should match expected")
 
 	// Merge: delete
-	_, ok = m.Merge(1, 999, func(old, newV int) (int, bool) {
+	_, ok = m.Merge(1, 999, func(_, _ int) (int, bool) {
 		return 0, false
 	})
 	require.False(t, ok, "Merge should return false when function indicates removal")
@@ -270,7 +270,7 @@ func TestConcurrentHashMap_ReplaceOperations(t *testing.T) {
 
 	// ReplaceAll
 	m.Put(2, "hello")
-	m.ReplaceAll(func(k int, v string) string {
+	m.ReplaceAll(func(_ int, v string) string {
 		return strings.ToUpper(v)
 	})
 	assert.Equal(t, "C", m.GetOrDefault(1, ""), "ReplaceAll should update value for key 1")
@@ -300,7 +300,7 @@ func TestConcurrentHashMap_ViewsAndIterations(t *testing.T) {
 
 	// ForEach
 	count := 0
-	m.ForEach(func(k, v int) bool {
+	m.ForEach(func(_, _ int) bool {
 		count++
 		return true
 	})
@@ -342,7 +342,7 @@ func TestConcurrentHashMap_CloneFilterEquals(t *testing.T) {
 	assert.True(t, m.Equals(c, eqV[int]), "Equals should be true")
 
 	// Filter
-	even := m.Filter(func(k, v int) bool {
+	even := m.Filter(func(k, _ int) bool {
 		return k%2 == 0
 	})
 	assert.Equal(t, 1, even.Size(), "Filter should keep one even key")
@@ -368,7 +368,7 @@ func TestConcurrentHashMap_CoverageSupplement(t *testing.T) {
 	}
 
 	count := 0
-	m.ForEach(func(k, v int) bool {
+	m.ForEach(func(_, _ int) bool {
 		count++
 		return count < 5
 	})
@@ -385,7 +385,7 @@ func TestConcurrentHashMap_PutOverwrite(t *testing.T) {
 	// First put - no previous value
 	old, replaced := m.Put(1, "first")
 	require.False(t, replaced, "Put should report no replacement for new key")
-	require.Equal(t, "", old, "Put should return zero value for new key")
+	require.Empty(t, old, "Put should return zero value for new key")
 
 	// Second put - overwrites
 	old, replaced = m.Put(1, "second")
@@ -406,7 +406,7 @@ func TestConcurrentHashMap_ReplaceAllEarlyExit(t *testing.T) {
 	}
 
 	// ReplaceAll should process all entries
-	m.ReplaceAll(func(k, v int) int {
+	m.ReplaceAll(func(_, v int) int {
 		return v + 1
 	})
 
@@ -419,7 +419,7 @@ func TestConcurrentHashMap_ReplaceAllEarlyExit(t *testing.T) {
 
 	// ReplaceAll on empty map
 	empty := NewConcurrentHashMap[int, int]()
-	empty.ReplaceAll(func(k, v int) int {
+	empty.ReplaceAll(func(_, v int) int {
 		return v * 2
 	})
 	require.Equal(t, 0, empty.Size(), "Empty map should remain empty")
@@ -430,16 +430,16 @@ func TestConcurrentHashMap_ComputeNotFound(t *testing.T) {
 	m := NewConcurrentHashMap[int, string]()
 
 	// Compute on non-existing key with keep=false
-	v, ok := m.Compute(1, func(k int, old string, exists bool) (string, bool) {
+	v, ok := m.Compute(1, func(_ int, _ string, exists bool) (string, bool) {
 		require.False(t, exists, "Key should not exist")
 		return "should_not_add", false
 	})
 	require.False(t, ok, "Compute should return false when keep=false")
-	require.Equal(t, "", v, "Compute should return zero value")
+	require.Empty(t, v, "Compute should return zero value")
 	require.False(t, m.ContainsKey(1), "Key should not be added when keep=false")
 
 	// Compute on non-existing key with keep=true
-	v, ok = m.Compute(2, func(k int, old string, exists bool) (string, bool) {
+	v, ok = m.Compute(2, func(_ int, _ string, exists bool) (string, bool) {
 		require.False(t, exists, "Key should not exist")
 		return "new_value", true
 	})
@@ -538,7 +538,6 @@ func TestConcurrentHashMap_GetOrComputeExisting(t *testing.T) {
 	require.False(t, computed, "GetOrCompute should not compute for existing key")
 	require.Equal(t, "existing", v, "GetOrCompute should return existing value")
 }
-
 
 func TestConcurrentHashMap_IsNotEmpty(t *testing.T) {
 	t.Parallel()

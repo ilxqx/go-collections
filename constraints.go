@@ -9,7 +9,7 @@ type Ordered = cmp.Ordered
 // Comparator compares two values:
 // - negative if a < b
 // - zero     if a == b
-// - positive if a > b
+// - positive if a > b.
 type Comparator[T any] func(a, b T) int
 
 // Equaler reports whether two values are equal.
