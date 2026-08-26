@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"iter"
-	"slices"
 	"sync"
 )
 
@@ -507,23 +506,35 @@ func (c *concurrentTreeMap[K, V]) HigherEntry(k K) (Entry[K, V], bool) {
 	return c.tm.HigherEntry(k)
 }
 
-// Range iterates entries with keys in [from, to] ascending over snapshot.
-func (c *concurrentTreeMap[K, V]) Range(from, to K, action func(key K, value V) bool) {
-	ents := func() []Entry[K, V] {
-		c.mu.RLock()
-		defer c.mu.RUnlock()
-		buf := make([]Entry[K, V], 0, c.tm.Size())
-		c.tm.Range(from, to, func(k K, v V) bool {
-			buf = append(buf, Entry[K, V]{Key: k, Value: v})
-			return true
-		})
-		return buf
-	}()
+// collectEntries snapshots the entries produced by iterate under the read
+// lock, so the caller can run user callbacks without holding it. Only the
+// entries iterate visits are collected — a narrow range costs a narrow
+// snapshot, not a full copy.
+func (c *concurrentTreeMap[K, V]) collectEntries(iterate func(*treeMap[K, V], func(K, V) bool)) []Entry[K, V] {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	var buf []Entry[K, V]
+	iterate(c.tm, func(k K, v V) bool {
+		buf = append(buf, Entry[K, V]{Key: k, Value: v})
+		return true
+	})
+	return buf
+}
+
+// replayEntries invokes action over ents, honoring early exit.
+func replayEntries[K, V any](ents []Entry[K, V], action func(key K, value V) bool) {
 	for _, e := range ents {
 		if !action(e.Key, e.Value) {
 			return
 		}
 	}
+}
+
+// Range iterates entries with keys in [from, to] ascending over snapshot.
+func (c *concurrentTreeMap[K, V]) Range(from, to K, action func(key K, value V) bool) {
+	replayEntries(c.collectEntries(func(tm *treeMap[K, V], yield func(K, V) bool) {
+		tm.Range(from, to, yield)
+	}), action)
 }
 
 // RangeSeq returns a sequence for entries with keys in [from, to] ascending (snapshot).
@@ -535,77 +546,46 @@ func (c *concurrentTreeMap[K, V]) RangeSeq(from, to K) iter.Seq2[K, V] {
 
 // RangeFrom iterates entries with keys >= from (snapshot).
 func (c *concurrentTreeMap[K, V]) RangeFrom(from K, action func(key K, value V) bool) {
-	for k, v := range c.Seq() {
-		if c.tm.keyCmp(k, from) >= 0 {
-			if !action(k, v) {
-				return
-			}
-		}
-	}
+	replayEntries(c.collectEntries(func(tm *treeMap[K, V], yield func(K, V) bool) {
+		tm.RangeFrom(from, yield)
+	}), action)
 }
 
 // RangeTo iterates entries with keys <= to (snapshot).
 func (c *concurrentTreeMap[K, V]) RangeTo(to K, action func(key K, value V) bool) {
-	for k, v := range c.Seq() {
-		if c.tm.keyCmp(k, to) <= 0 {
-			if !action(k, v) {
-				return
-			}
-		}
-	}
+	replayEntries(c.collectEntries(func(tm *treeMap[K, V], yield func(K, V) bool) {
+		tm.RangeTo(to, yield)
+	}), action)
 }
 
 // Ascend iterates all entries in ascending key order over snapshot.
 func (c *concurrentTreeMap[K, V]) Ascend(action func(key K, value V) bool) {
-	for k, v := range c.Seq() {
-		if !action(k, v) {
-			return
-		}
-	}
+	replayEntries(c.collectEntries((*treeMap[K, V]).Ascend), action)
 }
 
 // Descend iterates all entries in descending key order over snapshot.
 func (c *concurrentTreeMap[K, V]) Descend(action func(key K, value V) bool) {
-	ents := c.Entries()
-	for _, e := range slices.Backward(ents) {
-		if !action(e.Key, e.Value) {
-			return
-		}
-	}
+	replayEntries(c.collectEntries((*treeMap[K, V]).Descend), action)
 }
 
 // AscendFrom iterates entries with keys >= pivot ascending (snapshot).
 func (c *concurrentTreeMap[K, V]) AscendFrom(pivot K, action func(key K, value V) bool) {
-	for k, v := range c.Seq() {
-		if c.tm.keyCmp(k, pivot) >= 0 {
-			if !action(k, v) {
-				return
-			}
-		}
-	}
+	replayEntries(c.collectEntries(func(tm *treeMap[K, V], yield func(K, V) bool) {
+		tm.AscendFrom(pivot, yield)
+	}), action)
 }
 
 // DescendFrom iterates entries with keys <= pivot descending (snapshot).
 func (c *concurrentTreeMap[K, V]) DescendFrom(pivot K, action func(key K, value V) bool) {
-	ents := c.Entries()
-	for _, e := range slices.Backward(ents) {
-		if c.tm.keyCmp(e.Key, pivot) <= 0 {
-			if !action(e.Key, e.Value) {
-				return
-			}
-		}
-	}
+	replayEntries(c.collectEntries(func(tm *treeMap[K, V], yield func(K, V) bool) {
+		tm.DescendFrom(pivot, yield)
+	}), action)
 }
 
 // Reversed returns a sequence iterating in descending key order (snapshot).
 func (c *concurrentTreeMap[K, V]) Reversed() iter.Seq2[K, V] {
 	return func(yield func(K, V) bool) {
-		ents := c.Entries()
-		for _, e := range slices.Backward(ents) {
-			if !yield(e.Key, e.Value) {
-				return
-			}
-		}
+		c.Descend(func(k K, v V) bool { return yield(k, v) })
 	}
 }
 

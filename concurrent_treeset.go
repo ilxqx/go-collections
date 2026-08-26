@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"iter"
-	"slices"
 	"sync"
 )
 
@@ -485,23 +484,35 @@ func (c *concurrentTreeSet[T]) Higher(x T) (T, bool) {
 	return c.tree.Higher(x)
 }
 
-// Range iterates elements in [from, to] ascending over a snapshot.
-func (c *concurrentTreeSet[T]) Range(from, to T, action func(element T) bool) {
-	snap := func() []T {
-		c.mu.RLock()
-		defer c.mu.RUnlock()
-		buf := make([]T, 0, c.tree.Size())
-		c.tree.Range(from, to, func(e T) bool {
-			buf = append(buf, e)
-			return true
-		})
-		return buf
-	}()
-	for _, v := range snap {
+// collectElements snapshots the elements produced by iterate under the read
+// lock, so the caller can run user callbacks without holding it. Only the
+// elements iterate visits are collected — a narrow range costs a narrow
+// snapshot, not a full copy.
+func (c *concurrentTreeSet[T]) collectElements(iterate func(*treeSet[T], func(T) bool)) []T {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	var buf []T
+	iterate(c.tree, func(e T) bool {
+		buf = append(buf, e)
+		return true
+	})
+	return buf
+}
+
+// replayElements invokes action over elements, honoring early exit.
+func replayElements[T any](elements []T, action func(element T) bool) {
+	for _, v := range elements {
 		if !action(v) {
 			return
 		}
 	}
+}
+
+// Range iterates elements in [from, to] ascending over a snapshot.
+func (c *concurrentTreeSet[T]) Range(from, to T, action func(element T) bool) {
+	replayElements(c.collectElements(func(tree *treeSet[T], yield func(T) bool) {
+		tree.Range(from, to, yield)
+	}), action)
 }
 
 // RangeSeq returns a sequence for elements in [from, to] ascending (snapshot).
@@ -513,56 +524,32 @@ func (c *concurrentTreeSet[T]) RangeSeq(from, to T) iter.Seq[T] {
 
 // Ascend iterates all elements in ascending order over snapshot.
 func (c *concurrentTreeSet[T]) Ascend(action func(element T) bool) {
-	for v := range c.Seq() {
-		if !action(v) {
-			return
-		}
-	}
+	replayElements(c.collectElements((*treeSet[T]).Ascend), action)
 }
 
 // Descend iterates all elements in descending order over snapshot.
 func (c *concurrentTreeSet[T]) Descend(action func(element T) bool) {
-	snap := c.ToSlice()
-	for _, v := range slices.Backward(snap) {
-		if !action(v) {
-			return
-		}
-	}
+	replayElements(c.collectElements((*treeSet[T]).Descend), action)
 }
 
 // AscendFrom iterates elements >= pivot ascending over snapshot.
 func (c *concurrentTreeSet[T]) AscendFrom(pivot T, action func(element T) bool) {
-	snap := c.ToSlice()
-	for _, v := range snap {
-		if c.tree.cmp(v, pivot) >= 0 {
-			if !action(v) {
-				return
-			}
-		}
-	}
+	replayElements(c.collectElements(func(tree *treeSet[T], yield func(T) bool) {
+		tree.AscendFrom(pivot, yield)
+	}), action)
 }
 
 // DescendFrom iterates elements <= pivot descending over snapshot.
 func (c *concurrentTreeSet[T]) DescendFrom(pivot T, action func(element T) bool) {
-	snap := c.ToSlice()
-	for _, v := range slices.Backward(snap) {
-		if c.tree.cmp(v, pivot) <= 0 {
-			if !action(v) {
-				return
-			}
-		}
-	}
+	replayElements(c.collectElements(func(tree *treeSet[T], yield func(T) bool) {
+		tree.DescendFrom(pivot, yield)
+	}), action)
 }
 
 // Reversed returns a descending sequence (snapshot).
 func (c *concurrentTreeSet[T]) Reversed() iter.Seq[T] {
 	return func(yield func(T) bool) {
-		snap := c.ToSlice()
-		for _, v := range slices.Backward(snap) {
-			if !yield(v) {
-				return
-			}
-		}
+		c.Descend(func(e T) bool { return yield(e) })
 	}
 }
 
