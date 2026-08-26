@@ -76,20 +76,17 @@ func UnmarshalTreeMapOrderedJSON[K Ordered, V any](data []byte) (SortedMap[K, V]
 }
 
 // UnmarshalTreeSetGob deserializes a TreeSet from Gob.
-// Requires a comparator to be provided.
+// Requires a comparator to be provided. The data is the output of a standard
+// gob.Encoder run over the set, i.e. gob.NewEncoder(w).Encode(set).
 func UnmarshalTreeSetGob[T any](data []byte, comparator Comparator[T]) (SortedSet[T], error) {
 	if comparator == nil {
 		return nil, errors.New("unmarshal treeset gob: comparator required")
 	}
 
-	var elements []T
-	dec := gob.NewDecoder(bytes.NewReader(data))
-	if err := dec.Decode(&elements); err != nil {
+	set := newTreeSet(comparator)
+	if err := gob.NewDecoder(bytes.NewReader(data)).Decode(set); err != nil {
 		return nil, fmt.Errorf("unmarshal treeset gob: %w", err)
 	}
-
-	set := NewTreeSet(comparator)
-	set.AddAll(elements...)
 	return set, nil
 }
 
@@ -100,21 +97,16 @@ func UnmarshalTreeSetOrderedGob[T Ordered](data []byte) (SortedSet[T], error) {
 }
 
 // UnmarshalTreeMapGob deserializes a TreeMap from Gob.
-// Requires a comparator to be provided.
+// Requires a comparator to be provided. The data is the output of a standard
+// gob.Encoder run over the map, i.e. gob.NewEncoder(w).Encode(m).
 func UnmarshalTreeMapGob[K, V any](data []byte, comparator Comparator[K]) (SortedMap[K, V], error) {
 	if comparator == nil {
 		return nil, errors.New("unmarshal treemap gob: comparator required")
 	}
 
-	var entries []serializableEntry[K, V]
-	dec := gob.NewDecoder(bytes.NewReader(data))
-	if err := dec.Decode(&entries); err != nil {
+	m := newTreeMap[K, V](comparator)
+	if err := gob.NewDecoder(bytes.NewReader(data)).Decode(m); err != nil {
 		return nil, fmt.Errorf("unmarshal treemap gob: %w", err)
-	}
-
-	m := NewTreeMap[K, V](comparator)
-	for _, entry := range entries {
-		m.Put(entry.Key, entry.Value)
 	}
 	return m, nil
 }
@@ -149,20 +141,17 @@ func UnmarshalPriorityQueueOrderedJSON[T Ordered](data []byte) (PriorityQueue[T]
 }
 
 // UnmarshalPriorityQueueGob deserializes a PriorityQueue from Gob.
-// Requires a comparator to be provided.
+// Requires a comparator to be provided. The data is the output of a standard
+// gob.Encoder run over the queue, i.e. gob.NewEncoder(w).Encode(pq).
 func UnmarshalPriorityQueueGob[T any](data []byte, comparator Comparator[T]) (PriorityQueue[T], error) {
 	if comparator == nil {
 		return nil, errors.New("unmarshal priorityqueue gob: comparator required")
 	}
 
-	var elements []T
-	dec := gob.NewDecoder(bytes.NewReader(data))
-	if err := dec.Decode(&elements); err != nil {
+	pq := newPriorityQueue(comparator)
+	if err := gob.NewDecoder(bytes.NewReader(data)).Decode(pq); err != nil {
 		return nil, fmt.Errorf("unmarshal priorityqueue gob: %w", err)
 	}
-
-	pq := NewPriorityQueue(comparator)
-	pq.PushAll(elements...)
 	return pq, nil
 }
 

@@ -55,6 +55,11 @@ func NewPriorityQueue[T any](cmp Comparator[T]) PriorityQueue[T] {
 	if cmp == nil {
 		panic("NewPriorityQueue: comparator must not be nil")
 	}
+	return newPriorityQueue(cmp)
+}
+
+// newPriorityQueue creates the concrete queue for internal callers.
+func newPriorityQueue[T any](cmp Comparator[T]) *priorityQueue[T] {
 	return &priorityQueue[T]{
 		data: make([]T, 0),
 		cmp:  cmp,
@@ -176,26 +181,36 @@ func (pq *priorityQueue[T]) Seq() iter.Seq[T] {
 // MarshalJSON implements json.Marshaler.
 // Serializes elements in heap order (not sorted).
 //
-// NOTE: The comparator is NOT serialized. When deserializing, use:
-//   - UnmarshalPriorityQueueOrderedJSON[T](data) for Ordered types
-//   - UnmarshalPriorityQueueJSON[T](data, comparator) for custom comparators
+// NOTE: The comparator is NOT serialized. Decode into a queue constructed
+// with NewPriorityQueue, or use UnmarshalPriorityQueueJSON /
+// UnmarshalPriorityQueueOrderedJSON.
 func (pq *priorityQueue[T]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(pq.data)
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-// Returns an error because PriorityQueue requires a comparator.
-// Use UnmarshalPriorityQueueOrderedJSON or UnmarshalPriorityQueueJSON instead.
-func (*priorityQueue[T]) UnmarshalJSON(_ []byte) error {
-	return errors.New("cannot unmarshal PriorityQueue directly: use UnmarshalPriorityQueueOrderedJSON[T]() for Ordered types or UnmarshalPriorityQueueJSON[T](data, comparator) for custom comparators")
+// Deserializes into the receiver using its existing comparator, so construct
+// the queue with NewPriorityQueue (or a helper) before decoding.
+func (pq *priorityQueue[T]) UnmarshalJSON(data []byte) error {
+	if pq.cmp == nil {
+		return errors.New("unmarshal priorityqueue: no comparator; construct the queue with NewPriorityQueue before decoding, or use UnmarshalPriorityQueueJSON/UnmarshalPriorityQueueOrderedJSON")
+	}
+	var elements []T
+	if err := json.Unmarshal(data, &elements); err != nil {
+		return err
+	}
+	pq.data = elements
+	// Re-establish the heap invariant: the source need not be heap-ordered.
+	heap.Init(&heapWrapper[T]{pq: pq})
+	return nil
 }
 
 // GobEncode implements gob.GobEncoder.
 // Serializes elements in heap order (not sorted).
 //
-// NOTE: The comparator is NOT serialized. When deserializing, use:
-//   - UnmarshalPriorityQueueOrderedGob[T](data) for Ordered types
-//   - UnmarshalPriorityQueueGob[T](data, comparator) for custom comparators
+// NOTE: The comparator is NOT serialized. Decode into a queue constructed
+// with NewPriorityQueue, or use UnmarshalPriorityQueueGob /
+// UnmarshalPriorityQueueOrderedGob.
 func (pq *priorityQueue[T]) GobEncode() ([]byte, error) {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
@@ -206,10 +221,21 @@ func (pq *priorityQueue[T]) GobEncode() ([]byte, error) {
 }
 
 // GobDecode implements gob.GobDecoder.
-// Returns an error because PriorityQueue requires a comparator.
-// Use UnmarshalPriorityQueueOrderedGob or UnmarshalPriorityQueueGob instead.
-func (*priorityQueue[T]) GobDecode(_ []byte) error {
-	return errors.New("cannot unmarshal PriorityQueue directly: use UnmarshalPriorityQueueOrderedGob[T]() for Ordered types or UnmarshalPriorityQueueGob[T](data, comparator) for custom comparators")
+// Deserializes into the receiver using its existing comparator, so construct
+// the queue with NewPriorityQueue (or a helper) before decoding.
+func (pq *priorityQueue[T]) GobDecode(data []byte) error {
+	if pq.cmp == nil {
+		return errors.New("unmarshal priorityqueue: no comparator; construct the queue with NewPriorityQueue before decoding, or use UnmarshalPriorityQueueGob/UnmarshalPriorityQueueOrderedGob")
+	}
+	var elements []T
+	dec := gob.NewDecoder(bytes.NewReader(data))
+	if err := dec.Decode(&elements); err != nil {
+		return err
+	}
+	pq.data = elements
+	// Re-establish the heap invariant: the source need not be heap-ordered.
+	heap.Init(&heapWrapper[T]{pq: pq})
+	return nil
 }
 
 // Compile-time conformance.

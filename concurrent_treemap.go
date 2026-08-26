@@ -658,9 +658,8 @@ func (c *concurrentTreeMap[K, V]) CloneSorted() SortedMap[K, V] {
 // MarshalJSON implements json.Marshaler.
 // Serializes entries in ascending key order.
 //
-// NOTE: The comparator is NOT serialized. When deserializing, use:
-//   - UnmarshalTreeMapOrderedJSON[K, V](data) for Ordered key types
-//   - UnmarshalTreeMapJSON[K, V](data, comparator) for custom comparators
+// NOTE: The comparator is NOT serialized. Decode into a map constructed with
+// NewConcurrentTreeMap.
 func (c *concurrentTreeMap[K, V]) MarshalJSON() ([]byte, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -678,18 +677,22 @@ func (c *concurrentTreeMap[K, V]) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-// Returns an error because ConcurrentTreeMap requires a comparator.
-// Use UnmarshalTreeMapOrderedJSON or UnmarshalTreeMapJSON instead.
-func (*concurrentTreeMap[K, V]) UnmarshalJSON(_ []byte) error {
-	return errors.New("cannot unmarshal ConcurrentTreeMap directly: use UnmarshalTreeMapOrderedJSON[K, V]() for Ordered key types or UnmarshalTreeMapJSON[K, V](data, comparator) for custom comparators, then wrap with NewConcurrentTreeMap")
+// Deserializes into the receiver using its existing comparator, so construct
+// the map with NewConcurrentTreeMap before decoding.
+func (c *concurrentTreeMap[K, V]) UnmarshalJSON(data []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.tm == nil {
+		return errors.New("unmarshal concurrent treemap: no comparator; construct the map with NewConcurrentTreeMap before decoding")
+	}
+	return c.tm.UnmarshalJSON(data)
 }
 
 // GobEncode implements gob.GobEncoder.
 // Serializes entries in ascending key order.
 //
-// NOTE: The comparator is NOT serialized. When deserializing, use:
-//   - UnmarshalTreeMapOrderedGob[K, V](data) for Ordered key types
-//   - UnmarshalTreeMapGob[K, V](data, comparator) for custom comparators
+// NOTE: The comparator is NOT serialized. Decode into a map constructed with
+// NewConcurrentTreeMap.
 func (c *concurrentTreeMap[K, V]) GobEncode() ([]byte, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -711,10 +714,15 @@ func (c *concurrentTreeMap[K, V]) GobEncode() ([]byte, error) {
 }
 
 // GobDecode implements gob.GobDecoder.
-// Returns an error because ConcurrentTreeMap requires a comparator.
-// Use UnmarshalTreeMapOrderedGob or UnmarshalTreeMapGob instead.
-func (*concurrentTreeMap[K, V]) GobDecode(_ []byte) error {
-	return errors.New("cannot unmarshal ConcurrentTreeMap directly: use UnmarshalTreeMapOrderedGob[K, V]() for Ordered key types or UnmarshalTreeMapGob[K, V](data, comparator) for custom comparators, then wrap with NewConcurrentTreeMap")
+// Deserializes into the receiver using its existing comparator, so construct
+// the map with NewConcurrentTreeMap before decoding.
+func (c *concurrentTreeMap[K, V]) GobDecode(data []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.tm == nil {
+		return errors.New("unmarshal concurrent treemap: no comparator; construct the map with NewConcurrentTreeMap before decoding")
+	}
+	return c.tm.GobDecode(data)
 }
 
 // Conformance.

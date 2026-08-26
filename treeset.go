@@ -626,26 +626,35 @@ func (t *treeSet[T]) CloneSorted() SortedSet[T] {
 // MarshalJSON implements json.Marshaler.
 // Serializes elements in ascending order as a JSON array.
 //
-// NOTE: The comparator is NOT serialized. When deserializing, use:
-//   - UnmarshalTreeSetOrderedJSON[T](data) for Ordered types
-//   - UnmarshalTreeSetJSON[T](data, comparator) for custom comparators
+// NOTE: The comparator is NOT serialized. Decode into a set constructed with
+// NewTreeSet, or use UnmarshalTreeSetJSON / UnmarshalTreeSetOrderedJSON.
 func (t *treeSet[T]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.ToSlice())
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-// Returns an error because TreeSet requires a comparator.
-// Use UnmarshalTreeSetOrderedJSON or UnmarshalTreeSetJSON instead.
-func (*treeSet[T]) UnmarshalJSON(_ []byte) error {
-	return errors.New("cannot unmarshal TreeSet directly: use UnmarshalTreeSetOrderedJSON[T]() for Ordered types or UnmarshalTreeSetJSON[T](data, comparator) for custom comparators")
+// Deserializes a JSON array into the receiver using its existing comparator,
+// so construct the set with NewTreeSet (or a helper) before decoding.
+func (t *treeSet[T]) UnmarshalJSON(data []byte) error {
+	if t.cmp == nil {
+		return errors.New("unmarshal treeset: no comparator; construct the set with NewTreeSet before decoding, or use UnmarshalTreeSetJSON/UnmarshalTreeSetOrderedJSON")
+	}
+	var elements []T
+	if err := json.Unmarshal(data, &elements); err != nil {
+		return err
+	}
+	t.Clear()
+	for _, e := range elements {
+		t.add(e)
+	}
+	return nil
 }
 
 // GobEncode implements gob.GobEncoder.
 // Serializes elements in ascending order.
 //
-// NOTE: The comparator is NOT serialized. When deserializing, use:
-//   - UnmarshalTreeSetOrderedGob[T](data) for Ordered types
-//   - UnmarshalTreeSetGob[T](data, comparator) for custom comparators
+// NOTE: The comparator is NOT serialized. Decode into a set constructed with
+// NewTreeSet, or use UnmarshalTreeSetGob / UnmarshalTreeSetOrderedGob.
 func (t *treeSet[T]) GobEncode() ([]byte, error) {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
@@ -656,10 +665,22 @@ func (t *treeSet[T]) GobEncode() ([]byte, error) {
 }
 
 // GobDecode implements gob.GobDecoder.
-// Returns an error because TreeSet requires a comparator.
-// Use UnmarshalTreeSetOrderedGob or UnmarshalTreeSetGob instead.
-func (*treeSet[T]) GobDecode(_ []byte) error {
-	return errors.New("cannot unmarshal TreeSet directly: use UnmarshalTreeSetOrderedGob[T]() for Ordered types or UnmarshalTreeSetGob[T](data, comparator) for custom comparators")
+// Deserializes into the receiver using its existing comparator, so construct
+// the set with NewTreeSet (or a helper) before decoding.
+func (t *treeSet[T]) GobDecode(data []byte) error {
+	if t.cmp == nil {
+		return errors.New("unmarshal treeset: no comparator; construct the set with NewTreeSet before decoding, or use UnmarshalTreeSetGob/UnmarshalTreeSetOrderedGob")
+	}
+	var elements []T
+	dec := gob.NewDecoder(bytes.NewReader(data))
+	if err := dec.Decode(&elements); err != nil {
+		return err
+	}
+	t.Clear()
+	for _, e := range elements {
+		t.add(e)
+	}
+	return nil
 }
 
 // Compile-time conformance check.

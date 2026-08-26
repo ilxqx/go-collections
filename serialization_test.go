@@ -1120,28 +1120,25 @@ type TreeSetSerializationTestSuite struct {
 	suite.Suite
 }
 
-func (s *TreeSetSerializationTestSuite) TestDirectUnmarshalReturnsError() {
+func (s *TreeSetSerializationTestSuite) TestDirectUnmarshalIntoConstructed() {
 	s.Run("JSON", func() {
 		original := NewTreeSetFrom(CompareFunc[int](), 5, 2, 8)
 		data, err := json.Marshal(original)
 		s.Require().NoError(err, "Marshal should succeed")
 
 		restored := NewTreeSet(CompareFunc[int]())
-		err = json.Unmarshal(data, restored)
-		s.Require().Error(err, "Direct unmarshal should return error")
-		s.Contains(err.Error(), "cannot unmarshal TreeSet directly", "Error message should indicate use of helper functions")
+		s.Require().NoError(json.Unmarshal(data, restored), "Unmarshal into constructed set should succeed")
+		s.Equal(original.ToSlice(), restored.ToSlice(), "Round trip should preserve elements")
 	})
 
 	s.Run("Gob", func() {
 		original := NewTreeSetFrom(CompareFunc[int](), 5, 2, 8)
 		var buf bytes.Buffer
-		err := gob.NewEncoder(&buf).Encode(original)
-		s.Require().NoError(err, "Gob encode should succeed")
+		s.Require().NoError(gob.NewEncoder(&buf).Encode(original), "Gob encode should succeed")
 
 		restored := NewTreeSet(CompareFunc[int]())
-		err = gob.NewDecoder(&buf).Decode(restored)
-		s.Require().Error(err, "Direct gob decode should return error")
-		s.Contains(err.Error(), "cannot unmarshal TreeSet directly", "Error message should indicate use of helper functions")
+		s.Require().NoError(gob.NewDecoder(&buf).Decode(restored), "Gob decode into constructed set should succeed")
+		s.Equal(original.ToSlice(), restored.ToSlice(), "Round trip should preserve elements")
 	})
 }
 
@@ -1160,11 +1157,9 @@ func (s *TreeSetSerializationTestSuite) TestOrderedTypeWithHelper() {
 	s.Run("Gob", func() {
 		original := NewTreeSetFrom(CompareFunc[int](), 5, 2, 8, 1, 9)
 
-		// Encode the underlying data slice directly for helper functions
 		var buf bytes.Buffer
-		enc := gob.NewEncoder(&buf)
-		err := enc.Encode(original.ToSlice())
-		s.Require().NoError(err, "Gob encode data should succeed")
+		err := gob.NewEncoder(&buf).Encode(original)
+		s.Require().NoError(err, "Gob encode should succeed")
 
 		restored, err := UnmarshalTreeSetOrderedGob[int](buf.Bytes())
 		s.Require().NoError(err, "Unmarshal with helper should succeed")
@@ -1193,11 +1188,9 @@ func (s *TreeSetSerializationTestSuite) TestCustomComparatorWithHelper() {
 			return CompareFunc[int]()(b, a)
 		}
 		original := NewTreeSetFrom(reverseCompare, 5, 2, 8, 1, 9)
-		// Encode the underlying data slice directly for helper functions
 		var buf bytes.Buffer
-		enc := gob.NewEncoder(&buf)
-		err := enc.Encode(original.ToSlice())
-		s.Require().NoError(err, "Gob encode data should succeed")
+		err := gob.NewEncoder(&buf).Encode(original)
+		s.Require().NoError(err, "Gob encode should succeed")
 
 		restored, err := UnmarshalTreeSetGob(buf.Bytes(), reverseCompare)
 		s.Require().NoError(err, "Unmarshal with custom comparator should succeed")
@@ -1218,7 +1211,7 @@ type TreeMapSerializationTestSuite struct {
 	suite.Suite
 }
 
-func (s *TreeMapSerializationTestSuite) TestDirectUnmarshalReturnsError() {
+func (s *TreeMapSerializationTestSuite) TestDirectUnmarshalIntoConstructed() {
 	s.Run("JSON", func() {
 		original := NewTreeMap[int, string](CompareFunc[int]())
 		original.Put(1, "one")
@@ -1226,22 +1219,19 @@ func (s *TreeMapSerializationTestSuite) TestDirectUnmarshalReturnsError() {
 		s.Require().NoError(err, "Marshal should succeed")
 
 		restored := NewTreeMap[int, string](CompareFunc[int]())
-		err = json.Unmarshal(data, restored)
-		s.Require().Error(err, "Direct unmarshal should return error")
-		s.Contains(err.Error(), "cannot unmarshal TreeMap directly", "Error message should indicate use of helper functions")
+		s.Require().NoError(json.Unmarshal(data, restored), "Unmarshal into constructed map should succeed")
+		s.Equal(original.Entries(), restored.Entries(), "Round trip should preserve entries")
 	})
 
 	s.Run("Gob", func() {
 		original := NewTreeMap[int, string](CompareFunc[int]())
 		original.Put(1, "one")
 		var buf bytes.Buffer
-		err := gob.NewEncoder(&buf).Encode(original)
-		s.Require().NoError(err, "Gob encode should succeed")
+		s.Require().NoError(gob.NewEncoder(&buf).Encode(original), "Gob encode should succeed")
 
 		restored := NewTreeMap[int, string](CompareFunc[int]())
-		err = gob.NewDecoder(&buf).Decode(restored)
-		s.Require().Error(err, "Direct gob decode should return error")
-		s.Contains(err.Error(), "cannot unmarshal TreeMap directly", "Error message should indicate use of helper functions")
+		s.Require().NoError(gob.NewDecoder(&buf).Decode(restored), "Gob decode into constructed map should succeed")
+		s.Equal(original.Entries(), restored.Entries(), "Round trip should preserve entries")
 	})
 }
 
@@ -1271,15 +1261,9 @@ func (s *TreeMapSerializationTestSuite) TestOrderedKeyTypeWithHelper() {
 		original.Put(3, "three")
 		original.Put(1, "one")
 		original.Put(2, "two")
-		// Encode the underlying entries directly for helper functions
-		entries := make([]serializableEntry[int, string], 0)
-		for k, v := range original.Seq() {
-			entries = append(entries, serializableEntry[int, string]{Key: k, Value: v})
-		}
 		var buf bytes.Buffer
-		enc := gob.NewEncoder(&buf)
-		err := enc.Encode(entries)
-		s.Require().NoError(err, "Gob encode entries should succeed")
+		err := gob.NewEncoder(&buf).Encode(original)
+		s.Require().NoError(err, "Gob encode should succeed")
 
 		restored, err := UnmarshalTreeMapOrderedGob[int, string](buf.Bytes())
 		s.Require().NoError(err, "Unmarshal with helper should succeed")
@@ -1321,15 +1305,9 @@ func (s *TreeMapSerializationTestSuite) TestCustomComparatorWithHelper() {
 		original.Put(1, "one")
 		original.Put(2, "two")
 
-		// Encode the underlying entries directly for helper functions
-		entries := make([]serializableEntry[int, string], 0)
-		for k, v := range original.Seq() {
-			entries = append(entries, serializableEntry[int, string]{Key: k, Value: v})
-		}
 		var buf bytes.Buffer
-		enc := gob.NewEncoder(&buf)
-		err := enc.Encode(entries)
-		s.Require().NoError(err, "Gob encode entries should succeed")
+		err := gob.NewEncoder(&buf).Encode(original)
+		s.Require().NoError(err, "Gob encode should succeed")
 
 		restored, err := UnmarshalTreeMapGob[int, string](buf.Bytes(), reverseCompare)
 		s.Require().NoError(err, "Unmarshal with custom comparator should succeed")
@@ -1350,30 +1328,25 @@ type PriorityQueueSerializationTestSuite struct {
 	suite.Suite
 }
 
-func (s *PriorityQueueSerializationTestSuite) TestDirectUnmarshalReturnsError() {
+func (s *PriorityQueueSerializationTestSuite) TestDirectUnmarshalIntoConstructed() {
 	s.Run("JSON", func() {
-		original := NewPriorityQueueOrdered[int]()
-		original.Push(5)
+		original := NewPriorityQueueFrom(CompareFunc[int](), 5, 2, 8)
 		data, err := json.Marshal(original)
 		s.Require().NoError(err, "Marshal should succeed")
 
 		restored := NewPriorityQueueOrdered[int]()
-		err = json.Unmarshal(data, restored)
-		s.Require().Error(err, "Direct unmarshal should return error")
-		s.Contains(err.Error(), "cannot unmarshal PriorityQueue directly", "Error message should indicate use of helper functions")
+		s.Require().NoError(json.Unmarshal(data, restored), "Unmarshal into constructed queue should succeed")
+		s.Equal(original.ToSortedSlice(), restored.ToSortedSlice(), "Round trip should preserve elements")
 	})
 
 	s.Run("Gob", func() {
-		original := NewPriorityQueueOrdered[int]()
-		original.Push(5)
+		original := NewPriorityQueueFrom(CompareFunc[int](), 5, 2, 8)
 		var buf bytes.Buffer
-		err := gob.NewEncoder(&buf).Encode(original)
-		s.Require().NoError(err, "Gob encode should succeed")
+		s.Require().NoError(gob.NewEncoder(&buf).Encode(original), "Gob encode should succeed")
 
 		restored := NewPriorityQueueOrdered[int]()
-		err = gob.NewDecoder(&buf).Decode(restored)
-		s.Require().Error(err, "Direct gob decode should return error")
-		s.Contains(err.Error(), "cannot unmarshal PriorityQueue directly", "Error message should indicate use of helper functions")
+		s.Require().NoError(gob.NewDecoder(&buf).Decode(restored), "Gob decode into constructed queue should succeed")
+		s.Equal(original.ToSortedSlice(), restored.ToSortedSlice(), "Round trip should preserve elements")
 	})
 }
 
@@ -1396,11 +1369,9 @@ func (s *PriorityQueueSerializationTestSuite) TestOrderedTypeWithHelper() {
 	s.Run("Gob", func() {
 		original := NewPriorityQueueFrom(CompareFunc[int](), 5, 2, 8, 1, 9)
 
-		// Encode the underlying data slice directly for helper functions
 		var buf bytes.Buffer
-		enc := gob.NewEncoder(&buf)
-		err := enc.Encode(original.ToSlice())
-		s.Require().NoError(err, "Gob encode data should succeed")
+		err := gob.NewEncoder(&buf).Encode(original)
+		s.Require().NoError(err, "Gob encode should succeed")
 
 		restored, err := UnmarshalPriorityQueueOrderedGob[int](buf.Bytes())
 		s.Require().NoError(err, "Unmarshal with helper should succeed")
@@ -1436,11 +1407,9 @@ func (s *PriorityQueueSerializationTestSuite) TestCustomComparatorWithHelper() {
 		}
 		original := NewPriorityQueueFrom(maxHeapCompare, 5, 2, 8, 1, 9)
 
-		// Encode the underlying data slice directly for helper functions
 		var buf bytes.Buffer
-		enc := gob.NewEncoder(&buf)
-		err := enc.Encode(original.ToSlice())
-		s.Require().NoError(err, "Gob encode data should succeed")
+		err := gob.NewEncoder(&buf).Encode(original)
+		s.Require().NoError(err, "Gob encode should succeed")
 
 		restored, err := UnmarshalPriorityQueueGob(buf.Bytes(), maxHeapCompare)
 		s.Require().NoError(err, "Unmarshal with custom comparator should succeed")
@@ -1464,61 +1433,25 @@ type ConcurrentTreeSetSerializationTestSuite struct {
 	suite.Suite
 }
 
-func (s *ConcurrentTreeSetSerializationTestSuite) TestDirectUnmarshalReturnsError() {
-	s.Run("JSON", func() {
-		original := NewConcurrentTreeSetFrom(CompareFunc[int](), 5, 2, 8)
-		data, err := json.Marshal(original)
-		s.Require().NoError(err, "Marshal should succeed")
-
-		restored := NewConcurrentTreeSet(CompareFunc[int]())
-		err = json.Unmarshal(data, restored)
-		s.Require().Error(err, "Direct unmarshal should return error")
-		s.Contains(err.Error(), "cannot unmarshal ConcurrentTreeSet directly", "Error message should indicate use of helper functions")
-	})
-
-	s.Run("Gob", func() {
-		original := NewConcurrentTreeSetFrom(CompareFunc[int](), 5, 2, 8)
-		var buf bytes.Buffer
-		err := gob.NewEncoder(&buf).Encode(original)
-		s.Require().NoError(err, "Gob encode should succeed")
-
-		restored := NewConcurrentTreeSet(CompareFunc[int]())
-		err = gob.NewDecoder(&buf).Decode(restored)
-		s.Require().Error(err, "Direct gob decode should return error")
-		s.Contains(err.Error(), "cannot unmarshal ConcurrentTreeSet directly", "Error message should indicate use of helper functions")
-	})
-}
-
-func (s *ConcurrentTreeSetSerializationTestSuite) TestOrderedTypeWithHelper() {
+func (s *ConcurrentTreeSetSerializationTestSuite) TestDirectUnmarshalIntoConstructed() {
 	s.Run("JSON", func() {
 		original := NewConcurrentTreeSetFrom(CompareFunc[int](), 5, 2, 8, 1, 9)
 		data, err := json.Marshal(original)
 		s.Require().NoError(err, "Marshal should succeed")
 
-		// Use TreeSet helper then wrap with ConcurrentTreeSet
-		treeSet, err := UnmarshalTreeSetOrderedJSON[int](data)
-		s.Require().NoError(err, "Unmarshal TreeSet with helper should succeed")
-
-		restored := NewConcurrentTreeSetFrom(CompareFunc[int](), treeSet.ToSlice()...)
-		s.Equal(original.Size(), restored.Size(), "Size should match")
-		s.Equal(original.ToSlice(), restored.ToSlice(), "Sorted order should match")
+		restored := NewConcurrentTreeSet(CompareFunc[int]())
+		s.Require().NoError(json.Unmarshal(data, restored), "Unmarshal into constructed set should succeed")
+		s.Equal(original.ToSlice(), restored.ToSlice(), "Round trip should preserve elements")
 	})
 
 	s.Run("Gob", func() {
 		original := NewConcurrentTreeSetFrom(CompareFunc[int](), 5, 2, 8, 1, 9)
-
-		// Encode the underlying data slice directly for helper functions
 		var buf bytes.Buffer
-		enc := gob.NewEncoder(&buf)
-		err := enc.Encode(original.ToSlice())
-		s.Require().NoError(err, "Gob encode data should succeed")
+		s.Require().NoError(gob.NewEncoder(&buf).Encode(original), "Gob encode should succeed")
 
-		treeSet, err := UnmarshalTreeSetOrderedGob[int](buf.Bytes())
-		s.Require().NoError(err, "Unmarshal TreeSet with helper should succeed")
-
-		restored := NewConcurrentTreeSetFrom(CompareFunc[int](), treeSet.ToSlice()...)
-		s.Equal(original.Size(), restored.Size(), "Size should match")
-		s.Equal(original.ToSlice(), restored.ToSlice(), "Sorted order should match")
+		restored := NewConcurrentTreeSet(CompareFunc[int]())
+		s.Require().NoError(gob.NewDecoder(&buf).Decode(restored), "Gob decode into constructed set should succeed")
+		s.Equal(original.ToSlice(), restored.ToSlice(), "Round trip should preserve elements")
 	})
 }
 
@@ -1534,34 +1467,7 @@ type ConcurrentTreeMapSerializationTestSuite struct {
 	suite.Suite
 }
 
-func (s *ConcurrentTreeMapSerializationTestSuite) TestDirectUnmarshalReturnsError() {
-	s.Run("JSON", func() {
-		original := NewConcurrentTreeMapOrdered[int, string]()
-		original.Put(1, "one")
-		data, err := json.Marshal(original)
-		s.Require().NoError(err, "Marshal should succeed")
-
-		restored := NewConcurrentTreeMapOrdered[int, string]()
-		err = json.Unmarshal(data, restored)
-		s.Require().Error(err, "Direct unmarshal should return error")
-		s.Contains(err.Error(), "cannot unmarshal ConcurrentTreeMap directly", "Error message should indicate use of helper functions")
-	})
-
-	s.Run("Gob", func() {
-		original := NewConcurrentTreeMapOrdered[int, string]()
-		original.Put(1, "one")
-		var buf bytes.Buffer
-		err := gob.NewEncoder(&buf).Encode(original)
-		s.Require().NoError(err, "Gob encode should succeed")
-
-		restored := NewConcurrentTreeMapOrdered[int, string]()
-		err = gob.NewDecoder(&buf).Decode(restored)
-		s.Require().Error(err, "Direct gob decode should return error")
-		s.Contains(err.Error(), "cannot unmarshal ConcurrentTreeMap directly", "Error message should indicate use of helper functions")
-	})
-}
-
-func (s *ConcurrentTreeMapSerializationTestSuite) TestOrderedKeyTypeWithHelper() {
+func (s *ConcurrentTreeMapSerializationTestSuite) TestDirectUnmarshalIntoConstructed() {
 	s.Run("JSON", func() {
 		original := NewConcurrentTreeMapOrdered[int, string]()
 		original.Put(3, "three")
@@ -1570,22 +1476,9 @@ func (s *ConcurrentTreeMapSerializationTestSuite) TestOrderedKeyTypeWithHelper()
 		data, err := json.Marshal(original)
 		s.Require().NoError(err, "Marshal should succeed")
 
-		// Use TreeMap helper then wrap with ConcurrentTreeMap
-		treeMap, err := UnmarshalTreeMapOrderedJSON[int, string](data)
-		s.Require().NoError(err, "Unmarshal TreeMap with helper should succeed")
-
 		restored := NewConcurrentTreeMapOrdered[int, string]()
-		for k, v := range treeMap.Seq() {
-			restored.Put(k, v)
-		}
-		s.Equal(original.Size(), restored.Size(), "Size should match")
-
-		for _, key := range []int{1, 2, 3} {
-			origVal, _ := original.Get(key)
-			restVal, ok := restored.Get(key)
-			s.Require().True(ok, "Key %d should exist", key)
-			s.Equal(origVal, restVal, "Value for key %d should match", key)
-		}
+		s.Require().NoError(json.Unmarshal(data, restored), "Unmarshal into constructed map should succeed")
+		s.Equal(original.Entries(), restored.Entries(), "Round trip should preserve entries")
 	})
 
 	s.Run("Gob", func() {
@@ -1593,32 +1486,12 @@ func (s *ConcurrentTreeMapSerializationTestSuite) TestOrderedKeyTypeWithHelper()
 		original.Put(3, "three")
 		original.Put(1, "one")
 		original.Put(2, "two")
-
-		// Encode the underlying entries directly for helper functions
-		entries := make([]serializableEntry[int, string], 0)
-		for k, v := range original.Seq() {
-			entries = append(entries, serializableEntry[int, string]{Key: k, Value: v})
-		}
 		var buf bytes.Buffer
-		enc := gob.NewEncoder(&buf)
-		err := enc.Encode(entries)
-		s.Require().NoError(err, "Gob encode entries should succeed")
-
-		treeMap, err := UnmarshalTreeMapOrderedGob[int, string](buf.Bytes())
-		s.Require().NoError(err, "Unmarshal TreeMap with helper should succeed")
+		s.Require().NoError(gob.NewEncoder(&buf).Encode(original), "Gob encode should succeed")
 
 		restored := NewConcurrentTreeMapOrdered[int, string]()
-		for k, v := range treeMap.Seq() {
-			restored.Put(k, v)
-		}
-		s.Equal(original.Size(), restored.Size(), "Size should match")
-
-		for _, key := range []int{1, 2, 3} {
-			origVal, _ := original.Get(key)
-			restVal, ok := restored.Get(key)
-			s.Require().True(ok, "Key %d should exist", key)
-			s.Equal(origVal, restVal, "Value for key %d should match", key)
-		}
+		s.Require().NoError(gob.NewDecoder(&buf).Decode(restored), "Gob decode into constructed map should succeed")
+		s.Equal(original.Entries(), restored.Entries(), "Round trip should preserve entries")
 	})
 }
 
@@ -1783,4 +1656,38 @@ func (s *SerializationErrorHandlingTestSuite) TestHelperFunctionsWithInvalidGob(
 
 func TestSerializationErrorHandlingTestSuite(t *testing.T) {
 	suite.Run(t, new(SerializationErrorHandlingTestSuite))
+}
+
+// A zero-value comparator-carrying collection cannot decode; the error should
+// point at the constructor.
+func (s *SerializationErrorHandlingTestSuite) TestDecodeWithoutComparator() {
+	s.Run("TreeSet", func() {
+		var zero treeSet[int]
+		s.Require().ErrorContains(zero.UnmarshalJSON([]byte("[1]")), "no comparator", "JSON decode should require a comparator")
+		s.Require().ErrorContains(zero.GobDecode(nil), "no comparator", "Gob decode should require a comparator")
+	})
+
+	s.Run("TreeMap", func() {
+		var zero treeMap[int, string]
+		s.Require().ErrorContains(zero.UnmarshalJSON([]byte("{}")), "no comparator", "JSON decode should require a comparator")
+		s.Require().ErrorContains(zero.GobDecode(nil), "no comparator", "Gob decode should require a comparator")
+	})
+
+	s.Run("PriorityQueue", func() {
+		var zero priorityQueue[int]
+		s.Require().ErrorContains(zero.UnmarshalJSON([]byte("[1]")), "no comparator", "JSON decode should require a comparator")
+		s.Require().ErrorContains(zero.GobDecode(nil), "no comparator", "Gob decode should require a comparator")
+	})
+
+	s.Run("ConcurrentTreeSet", func() {
+		var zero concurrentTreeSet[int]
+		s.Require().ErrorContains(zero.UnmarshalJSON([]byte("[1]")), "no comparator", "JSON decode should require a comparator")
+		s.Require().ErrorContains(zero.GobDecode(nil), "no comparator", "Gob decode should require a comparator")
+	})
+
+	s.Run("ConcurrentTreeMap", func() {
+		var zero concurrentTreeMap[int, string]
+		s.Require().ErrorContains(zero.UnmarshalJSON([]byte("{}")), "no comparator", "JSON decode should require a comparator")
+		s.Require().ErrorContains(zero.GobDecode(nil), "no comparator", "Gob decode should require a comparator")
+	})
 }

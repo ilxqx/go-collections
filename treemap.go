@@ -647,7 +647,8 @@ func (t *treeMap[K, V]) TailMap(from K, inclusive bool) SortedMap[K, V] {
 	return out
 }
 
-// RankOfKey returns the 0-based rank of key, or -1 if not present.
+// RankOfKey returns the 0-based rank of key, or -1 if not present. O(n): the
+// backing B-tree offers no key-to-rank lookup, so this scans.
 func (t *treeMap[K, V]) RankOfKey(key K) int {
 	idx := 0
 	found := -1
@@ -688,9 +689,8 @@ func (t *treeMap[K, V]) CloneSorted() SortedMap[K, V] {
 // MarshalJSON implements json.Marshaler.
 // Serializes entries in ascending key order as a JSON object with "entries" array.
 //
-// NOTE: The comparator is NOT serialized. When deserializing, use:
-//   - UnmarshalTreeMapOrderedJSON[K, V](data) for Ordered key types
-//   - UnmarshalTreeMapJSON[K, V](data, comparator) for custom comparators
+// NOTE: The comparator is NOT serialized. Decode into a map constructed with
+// NewTreeMap, or use UnmarshalTreeMapJSON / UnmarshalTreeMapOrderedJSON.
 func (t *treeMap[K, V]) MarshalJSON() ([]byte, error) {
 	wrapped := serializableMap[K, V]{
 		Entries: make([]serializableEntry[K, V], 0, t.bt.Len()),
@@ -706,18 +706,28 @@ func (t *treeMap[K, V]) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-// Returns an error because TreeMap requires a comparator.
-// Use UnmarshalTreeMapOrderedJSON or UnmarshalTreeMapJSON instead.
-func (*treeMap[K, V]) UnmarshalJSON(_ []byte) error {
-	return errors.New("cannot unmarshal TreeMap directly: use UnmarshalTreeMapOrderedJSON[K, V]() for Ordered key types or UnmarshalTreeMapJSON[K, V](data, comparator) for custom comparators")
+// Deserializes into the receiver using its existing comparator, so construct
+// the map with NewTreeMap (or a helper) before decoding.
+func (t *treeMap[K, V]) UnmarshalJSON(data []byte) error {
+	if t.keyCmp == nil {
+		return errors.New("unmarshal treemap: no comparator; construct the map with NewTreeMap before decoding, or use UnmarshalTreeMapJSON/UnmarshalTreeMapOrderedJSON")
+	}
+	var wrapped serializableMap[K, V]
+	if err := json.Unmarshal(data, &wrapped); err != nil {
+		return err
+	}
+	t.Clear()
+	for _, entry := range wrapped.Entries {
+		t.Put(entry.Key, entry.Value)
+	}
+	return nil
 }
 
 // GobEncode implements gob.GobEncoder.
 // Serializes entries in ascending key order.
 //
-// NOTE: The comparator is NOT serialized. When deserializing, use:
-//   - UnmarshalTreeMapOrderedGob[K, V](data) for Ordered key types
-//   - UnmarshalTreeMapGob[K, V](data, comparator) for custom comparators
+// NOTE: The comparator is NOT serialized. Decode into a map constructed with
+// NewTreeMap, or use UnmarshalTreeMapGob / UnmarshalTreeMapOrderedGob.
 func (t *treeMap[K, V]) GobEncode() ([]byte, error) {
 	entries := make([]serializableEntry[K, V], 0, t.bt.Len())
 	t.bt.Scan(func(me mapEntry[K, V]) bool {
@@ -737,10 +747,22 @@ func (t *treeMap[K, V]) GobEncode() ([]byte, error) {
 }
 
 // GobDecode implements gob.GobDecoder.
-// Returns an error because TreeMap requires a comparator.
-// Use UnmarshalTreeMapOrderedGob or UnmarshalTreeMapGob instead.
-func (*treeMap[K, V]) GobDecode(_ []byte) error {
-	return errors.New("cannot unmarshal TreeMap directly: use UnmarshalTreeMapOrderedGob[K, V]() for Ordered key types or UnmarshalTreeMapGob[K, V](data, comparator) for custom comparators")
+// Deserializes into the receiver using its existing comparator, so construct
+// the map with NewTreeMap (or a helper) before decoding.
+func (t *treeMap[K, V]) GobDecode(data []byte) error {
+	if t.keyCmp == nil {
+		return errors.New("unmarshal treemap: no comparator; construct the map with NewTreeMap before decoding, or use UnmarshalTreeMapGob/UnmarshalTreeMapOrderedGob")
+	}
+	var entries []serializableEntry[K, V]
+	dec := gob.NewDecoder(bytes.NewReader(data))
+	if err := dec.Decode(&entries); err != nil {
+		return err
+	}
+	t.Clear()
+	for _, entry := range entries {
+		t.Put(entry.Key, entry.Value)
+	}
+	return nil
 }
 
 // Compile-time conformance check.

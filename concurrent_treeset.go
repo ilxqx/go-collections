@@ -615,9 +615,8 @@ func (c *concurrentTreeSet[T]) CloneSorted() SortedSet[T] {
 // MarshalJSON implements json.Marshaler.
 // Serializes elements in ascending order as a JSON array.
 //
-// NOTE: The comparator is NOT serialized. When deserializing, use:
-//   - UnmarshalTreeSetOrderedJSON[T](data) for Ordered types
-//   - UnmarshalTreeSetJSON[T](data, comparator) for custom comparators
+// NOTE: The comparator is NOT serialized. Decode into a set constructed with
+// NewConcurrentTreeSet.
 func (c *concurrentTreeSet[T]) MarshalJSON() ([]byte, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -625,18 +624,22 @@ func (c *concurrentTreeSet[T]) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-// Returns an error because ConcurrentTreeSet requires a comparator.
-// Use UnmarshalTreeSetOrderedJSON or UnmarshalTreeSetJSON instead.
-func (*concurrentTreeSet[T]) UnmarshalJSON(_ []byte) error {
-	return errors.New("cannot unmarshal ConcurrentTreeSet directly: use UnmarshalTreeSetOrderedJSON[T]() for Ordered types or UnmarshalTreeSetJSON[T](data, comparator) for custom comparators, then wrap with NewConcurrentTreeSet")
+// Deserializes into the receiver using its existing comparator, so construct
+// the set with NewConcurrentTreeSet before decoding.
+func (c *concurrentTreeSet[T]) UnmarshalJSON(data []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.tree == nil {
+		return errors.New("unmarshal concurrent treeset: no comparator; construct the set with NewConcurrentTreeSet before decoding")
+	}
+	return c.tree.UnmarshalJSON(data)
 }
 
 // GobEncode implements gob.GobEncoder.
 // Serializes elements in ascending order.
 //
-// NOTE: The comparator is NOT serialized. When deserializing, use:
-//   - UnmarshalTreeSetOrderedGob[T](data) for Ordered types
-//   - UnmarshalTreeSetGob[T](data, comparator) for custom comparators
+// NOTE: The comparator is NOT serialized. Decode into a set constructed with
+// NewConcurrentTreeSet.
 func (c *concurrentTreeSet[T]) GobEncode() ([]byte, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -650,10 +653,15 @@ func (c *concurrentTreeSet[T]) GobEncode() ([]byte, error) {
 }
 
 // GobDecode implements gob.GobDecoder.
-// Returns an error because ConcurrentTreeSet requires a comparator.
-// Use UnmarshalTreeSetOrderedGob or UnmarshalTreeSetGob instead.
-func (*concurrentTreeSet[T]) GobDecode(_ []byte) error {
-	return errors.New("cannot unmarshal ConcurrentTreeSet directly: use UnmarshalTreeSetOrderedGob[T]() for Ordered types or UnmarshalTreeSetGob[T](data, comparator) for custom comparators, then wrap with NewConcurrentTreeSet")
+// Deserializes into the receiver using its existing comparator, so construct
+// the set with NewConcurrentTreeSet before decoding.
+func (c *concurrentTreeSet[T]) GobDecode(data []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.tree == nil {
+		return errors.New("unmarshal concurrent treeset: no comparator; construct the set with NewConcurrentTreeSet before decoding")
+	}
+	return c.tree.GobDecode(data)
 }
 
 // Conformance.
