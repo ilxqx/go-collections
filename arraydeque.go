@@ -34,7 +34,8 @@ func NewArrayDequeWithCapacity[T any](capacity int) Deque[T] {
 func NewArrayDequeFrom[T any](elements ...T) Deque[T] {
 	cp := make([]T, len(elements))
 	copy(cp, elements)
-	return &arrayDeque[T]{buf: cp, head: 0, tail: len(cp), size: len(cp)}
+	// The buffer is exactly full, so the circular one-past-last index wraps to 0.
+	return &arrayDeque[T]{buf: cp, head: 0, tail: 0, size: len(cp)}
 }
 
 // Size returns the number of elements.
@@ -211,11 +212,11 @@ func (d *arrayDeque[T]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &slice); err != nil {
 		return err
 	}
-	// Rebuild deque
+	// Rebuild deque; the buffer is exactly full, so tail wraps to 0.
 	d.buf = make([]T, len(slice))
 	copy(d.buf, slice)
 	d.head = 0
-	d.tail = len(slice)
+	d.tail = 0
 	d.size = len(slice)
 	return nil
 }
@@ -237,11 +238,11 @@ func (d *arrayDeque[T]) GobDecode(data []byte) error {
 	if err := dec.Decode(&slice); err != nil {
 		return err
 	}
-	// Rebuild deque
+	// Rebuild deque; the buffer is exactly full, so tail wraps to 0.
 	d.buf = make([]T, len(slice))
 	copy(d.buf, slice)
 	d.head = 0
-	d.tail = len(slice)
+	d.tail = 0
 	d.size = len(slice)
 	return nil
 }

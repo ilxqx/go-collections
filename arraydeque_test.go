@@ -1,6 +1,9 @@
 package collections
 
 import (
+	"bytes"
+	"encoding/gob"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -247,4 +250,43 @@ func TestArrayDeque_IsNotEmpty(t *testing.T) {
 	assert.False(t, d.IsNotEmpty(), "new deque should not be non-empty")
 	d.PushBack(1)
 	assert.True(t, d.IsNotEmpty(), "deque with element should be non-empty")
+}
+
+// Regression: a deque whose buffer starts exactly full (NewArrayDequeFrom and
+// the JSON/Gob decode paths) must keep the circular tail index in [0, len),
+// or the first PushBack after a PopFront writes past the buffer.
+func TestArrayDeque_FullInitialStatePushBack(t *testing.T) {
+	t.Parallel()
+
+	build := map[string]func(t *testing.T) Deque[int]{
+		"NewArrayDequeFrom": func(_ *testing.T) Deque[int] {
+			return NewArrayDequeFrom(1, 2, 3)
+		},
+		"UnmarshalJSON": func(t *testing.T) Deque[int] {
+			d := NewArrayDeque[int]()
+			require.NoError(t, json.Unmarshal([]byte("[1,2,3]"), d), "JSON decode should succeed")
+			return d
+		},
+		"GobDecode": func(t *testing.T) Deque[int] {
+			var buf bytes.Buffer
+			require.NoError(t, gob.NewEncoder(&buf).Encode(NewArrayDequeFrom(1, 2, 3)), "gob encode should succeed")
+			d := NewArrayDeque[int]()
+			require.NoError(t, gob.NewDecoder(&buf).Decode(d), "gob decode should succeed")
+			return d
+		},
+	}
+
+	for name, mk := range build {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			d := mk(t)
+			v, ok := d.PopFront()
+			require.True(t, ok, "PopFront should succeed on full deque")
+			assert.Equal(t, 1, v, "PopFront should return the front element")
+			assert.NotPanics(t, func() { d.PushBack(4) }, "PushBack after PopFront should not panic")
+			assert.Equal(t, []int{2, 3, 4}, d.ToSlice(), "contents should be front-to-back after wrap")
+			d.PushFront(1)
+			assert.Equal(t, []int{1, 2, 3, 4}, d.ToSlice(), "PushFront should restore the front")
+		})
+	}
 }
