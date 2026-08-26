@@ -100,6 +100,12 @@ type Set[T any] interface {
 	// IsDisjoint reports whether s and other have no elements in common.
 	IsDisjoint(other Set[T]) bool
 	// Equals reports whether s and other contain exactly the same elements.
+	//
+	// Equals and the other cross-set predicates test membership with each
+	// set's own equality (a comparable type's ==, a TreeSet's comparator).
+	// When the two sets disagree on which elements are equal — say a
+	// case-insensitive TreeSet and a HashSet — the result can be asymmetric;
+	// only compare sets that share an equivalence relation.
 	Equals(other Set[T]) bool
 
 	// --- Transformations ---
@@ -608,10 +614,14 @@ type SortedMap[K, V any] interface {
 //
 // 1. ATOMIC (✓): Guaranteed atomic in all implementations.
 //    - Single-key reads: Get, Contains, ContainsKey
-//    - Single-key writes: Add, Remove, Put
+//    - Single-key writes: Add, Remove
 //    - Atomic compound operations: AddIfAbsent, RemoveAndGet, PutIfAbsent, GetOrCompute
 //
-// 2. BEST-EFFORT (~): Atomic in hash-based implementations; may race in lock-free skip lists.
+// 2. BEST-EFFORT (~): Atomic in the mutex- and hash-based implementations;
+//    may race in the lock-free skip-list implementations.
+//    - Put: the write itself is always atomic, but the skip-list variants
+//      load the previous value and then store, so the returned old value can
+//      be stale when two writers hit the same key.
 //    - CompareAndSwap, CompareAndDelete, RemoveIf, ReplaceIf
 //    - These use load-then-modify patterns that can race under high contention.
 //
@@ -645,7 +655,9 @@ type ConcurrentSet[T any] interface {
 // It embeds ConcurrentSet to inherit atomic methods.
 //
 // Additional atomicity notes for sorted operations:
-//   - ATOMIC: First, Last, Floor, Ceiling, Lower, Higher
+//   - First, Last, Floor, Ceiling, Lower, Higher: atomic in the mutex-guarded
+//     tree implementation; the lock-free skip-list implementation answers them
+//     by scanning, so the result is a best-effort snapshot.
 //   - BEST-EFFORT: PopFirst, PopLast (may retry under contention)
 //   - NON-ATOMIC: Range, Ascend, Descend, SubSet, HeadSet, TailSet
 type ConcurrentSortedSet[T any] interface {
@@ -657,15 +669,20 @@ type ConcurrentSortedSet[T any] interface {
 // All methods are safe for concurrent calls from multiple goroutines.
 //
 // Atomicity guarantees:
-//   - ATOMIC: Get, Put, Remove, ContainsKey, PutIfAbsent, RemoveAndGet, GetOrCompute
+//   - ATOMIC: Get, Remove, ContainsKey, PutIfAbsent, RemoveAndGet, GetOrCompute
+//   - Put: the write is atomic everywhere, but in ConcurrentSkipMap the
+//     returned old value comes from a separate load and can be stale when
+//     two writers hit the same key.
 //   - BEST-EFFORT: CompareAndSwap, CompareAndDelete, RemoveIf, ReplaceIf
-//     (atomic in ConcurrentHashMap; may race in ConcurrentSkipMap)
+//     (atomic in ConcurrentHashMap and ConcurrentTreeMap; may race in
+//     ConcurrentSkipMap)
 //   - NON-ATOMIC: PutAll, RemoveAll, RemoveFunc, ReplaceAll, Keys, Values, Entries, Seq
 //
 // Implementation notes:
 //   - ConcurrentHashMap (xsync.MapOf): All operations are strictly atomic.
 //   - ConcurrentSkipMap (lock-free skip list): Single-key ops are atomic;
-//     compound ops like CompareAndSwap use load-then-modify and may race.
+//     compound ops — Put's old-value report, CompareAndSwap and the like —
+//     use load-then-modify and may race.
 type ConcurrentMap[K, V any] interface {
 	Map[K, V]
 
@@ -691,7 +708,10 @@ type ConcurrentMap[K, V any] interface {
 // It embeds ConcurrentMap to inherit atomic methods.
 //
 // Additional atomicity notes for sorted operations:
-//   - ATOMIC: FirstKey, LastKey, FirstEntry, LastEntry, FloorKey, CeilingKey
+//   - FirstKey, LastKey, FirstEntry, LastEntry, FloorKey, CeilingKey: atomic
+//     in the mutex-guarded tree implementation; the lock-free skip-list
+//     implementation answers them by scanning, so the result is a
+//     best-effort snapshot.
 //   - BEST-EFFORT: PopFirst, PopLast (may retry under contention)
 //   - NON-ATOMIC: Range, Ascend, Descend, SubMap, HeadMap, TailMap
 type ConcurrentSortedMap[K, V any] interface {

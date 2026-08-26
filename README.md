@@ -344,6 +344,8 @@ func NewConcurrentTreeSetFrom[T any](cmpT Comparator[T], elements ...T) Concurre
 
 Lock-free concurrent sorted set backed by skip list. For `Ordered` types only.
 
+**Atomicity Note:** Single-element operations (`Add`/`Contains`/`Remove`) are atomic. Navigation queries (`First`/`Last`/`Floor`/`Ceiling`/…) answer by scanning, so they return best-effort snapshots at O(n) cost. For strict semantics, use `ConcurrentTreeSet` instead.
+
 **Constructors:**
 
 ```go
@@ -575,7 +577,7 @@ func NewConcurrentTreeMapFrom[K comparable, V any](cmpK Comparator[K], m map[K]V
 
 Lock-free concurrent sorted map backed by skip list. For `Ordered` keys only.
 
-**Atomicity Note:** Single-key operations (`Get`/`Put`/`PutIfAbsent`/`RemoveAndGet`) are atomic. However, `CompareAndSwap` and `CompareAndDelete` are **best-effort** under high contention due to the lock-free nature of skip lists. For strict CAS semantics, use `ConcurrentTreeMap` instead.
+**Atomicity Note:** Single-key operations (`Get`/`PutIfAbsent`/`RemoveAndGet`) are atomic. `Put` stores atomically, but reports the old value from a separate load, so the returned old value is **best-effort** when writers race on one key. `CompareAndSwap` and `CompareAndDelete` are likewise **best-effort** due to the lock-free nature of skip lists, and navigation queries (`FirstKey`/`LastKey`/`Floor`/`Ceiling`/…) answer by scanning, so they return best-effort snapshots at O(n) cost. For strict semantics, use `ConcurrentTreeMap` instead.
 
 **Constructors:**
 
@@ -721,21 +723,20 @@ func NewCOWList[T any]() List[T]
 func NewCOWListFrom[T any](elements ...T) List[T]
 ```
 
-#### SegmentedList
+#### SyncList
 
-A concurrent list using segmented locking for better write concurrency than COWList.
+A concurrent list backed by a slice guarded by a single RWMutex. Every method call is atomic; iteration methods copy a snapshot first, so callbacks never run under the lock. (Replaces the former SegmentedList, whose segmented locks delivered no real write concurrency.)
 
 **Constructors:**
 
 ```go
-func NewSegmentedList[T any]() List[T]
-func NewSegmentedListWithSegments[T any](segmentCount int) List[T]
-func NewSegmentedListFrom[T any](elements ...T) List[T]
+func NewSyncList[T any]() List[T]
+func NewSyncListFrom[T any](elements ...T) List[T]
 ```
 
 #### LockFreeList
 
-A lock-free concurrent linked list using CAS operations based on Harris's algorithm with logical deletion.
+A lock-free concurrent linked list using CAS operations with logical deletion (deleted nodes are marked and skipped, and reclaimed when `Clear` detaches the chain).
 
 **Constructors:**
 
@@ -745,33 +746,33 @@ func NewLockFreeListOrdered[T comparable]() List[T]
 func NewLockFreeListFrom[T any](eq Equaler[T], elements ...T) List[T]
 ```
 
-**Note:** Due to logical deletion and node recycling, there is a potential ABA risk (implementation uses best-effort CAS). Suitable for scenarios that tolerate occasional retries.
+**Note:** `Add` walks the chain to append, so it is O(n) and bulk building is O(n²); removals are logical, so traversal cost also grows with removals until `Clear`. Best suited to small, hot lists where lock-free progress matters more than throughput at scale.
 
 ### Concurrent List Comparison
 
-| Feature | COWList | SegmentedList | LockFreeList |
-|---------|---------|---------------|--------------|
-| **Read Performance** | O(1) lock-free | O(1) with segment lock | O(n) traversal |
-| **Write Performance** | O(n) copy | O(1) amortized per segment | O(1) CAS at head |
-| **Memory Overhead** | High (full copy on write) | Low (segment metadata) | Medium (node + deleted flag) |
-| **Consistency** | Snapshot reads | Segment-level atomic | Eventual (logical deletion) |
-| **Best For** | Read-heavy, rare writes | Balanced read/write | High contention, frequent add/remove |
+| Feature | COWList | SyncList | LockFreeList |
+|---------|---------|----------|--------------|
+| **Read Performance** | O(1) lock-free | O(1) under read lock | O(n) traversal |
+| **Write Performance** | O(n) copy | O(1) amortized under write lock | O(n) walk + CAS |
+| **Memory Overhead** | High (full copy on write) | Low | Medium (node + deleted flag) |
+| **Consistency** | Snapshot reads | Per-call atomic | Eventual (logical deletion) |
+| **Best For** | Read-heavy, rare writes | Balanced read/write | Small hot lists under high contention |
 | **Size Accuracy** | Exact | Exact | Approximate |
 | **Random Access** | O(1) | O(1) | O(n) |
 | **Iteration** | Snapshot | Snapshot | Snapshot |
 
 **When to use which:**
 - **COWList**: Ideal for read-heavy workloads where writes are infrequent (e.g., configuration lists, caches)
-- **SegmentedList**: Balanced read/write workloads with moderate concurrency
-- **LockFreeList**: High-contention scenarios where progress guarantees matter more than exact counts
+- **SyncList**: Balanced read/write workloads; the simple, predictable default
+- **LockFreeList**: Small, high-contention lists where progress guarantees matter more than exact counts
 
 **Atomicity:**
 
-| Operation | COWList | SegmentedList | LockFreeList |
-|-----------|---------|---------------|--------------|
-| Get/Contains | Atomic (snapshot) | Atomic (segment lock) | Atomic |
-| Add/Insert | Atomic (full copy) | Atomic (segment lock) | Best-effort CAS |
-| Remove | Atomic (full copy) | Atomic (may cross segments) | Best-effort CAS |
+| Operation | COWList | SyncList | LockFreeList |
+|-----------|---------|----------|--------------|
+| Get/Contains | Atomic (snapshot) | Atomic (lock) | Atomic |
+| Add/Insert | Atomic (full copy) | Atomic (lock) | Best-effort CAS |
+| Remove | Atomic (full copy) | Atomic (lock) | Best-effort CAS |
 | Size | Exact | Exact | Approximate |
 | Iteration | Snapshot | Snapshot | Snapshot |
 
