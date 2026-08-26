@@ -3,6 +3,7 @@ package collections
 import (
 	"runtime"
 	"slices"
+	"sync"
 	"testing"
 	"testing/synctest"
 
@@ -656,4 +657,25 @@ func TestConcurrentSkipSet_IsNotEmpty(t *testing.T) {
 	assert.False(t, s.IsNotEmpty(), "new set should not be non-empty")
 	s.Add(1)
 	assert.True(t, s.IsNotEmpty(), "set with element should be non-empty")
+}
+
+// Regression: Clear used to swap the underlying skip list pointer without
+// synchronization, racing with every concurrent accessor.
+func TestConcurrentSkipSet_ClearConcurrentWithAdd(t *testing.T) {
+	t.Parallel()
+	s := NewConcurrentSkipSet[int]()
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for i := range 2000 {
+			s.Add(i % 10)
+		}
+	})
+	wg.Go(func() {
+		for range 2000 {
+			s.Clear()
+		}
+	})
+	wg.Wait()
+	s.Clear()
+	require.Equal(t, 0, s.Size(), "quiescent Clear should leave the set empty")
 }

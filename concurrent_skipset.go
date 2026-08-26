@@ -41,10 +41,15 @@ func (c *concurrentSkipSet[T]) Size() int { return c.s.Len() }
 func (c *concurrentSkipSet[T]) IsEmpty() bool    { return c.Size() == 0 }
 func (c *concurrentSkipSet[T]) IsNotEmpty() bool { return !c.IsEmpty() }
 
-// Clear removes all elements by replacing the underlying structure.
-// Note: This may cause a temporary memory peak while the old structure is
-// garbage-collected, depending on GC timing.
-func (c *concurrentSkipSet[T]) Clear() { c.s = skipset.New[T]() }
+// Clear removes all elements one by one, so concurrent readers and writers
+// stay safe. Best-effort under concurrency: elements inserted while Clear
+// runs may survive it.
+func (c *concurrentSkipSet[T]) Clear() {
+	c.s.Range(func(v T) bool {
+		c.s.Remove(v)
+		return true
+	})
+}
 
 // ToSlice returns a snapshot slice of all elements in ascending order.
 func (c *concurrentSkipSet[T]) ToSlice() []T {
@@ -401,7 +406,9 @@ func (c *concurrentSkipSet[T]) PopFirst() (T, bool) {
 	}
 }
 
-// PopLast removes and returns the largest element.
+// PopLast removes and returns the largest element (best-effort).
+// O(n) per call: the skip list cannot iterate backwards, so finding the
+// largest element scans the whole set; draining a set this way is O(n²).
 func (c *concurrentSkipSet[T]) PopLast() (T, bool) {
 	for {
 		v, ok := c.Last()
@@ -663,7 +670,7 @@ func (c *concurrentSkipSet[T]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &slice); err != nil {
 		return err
 	}
-	c.s = skipset.New[T]()
+	c.Clear()
 	for _, elem := range slice {
 		c.s.Add(elem)
 	}
@@ -689,7 +696,7 @@ func (c *concurrentSkipSet[T]) GobDecode(data []byte) error {
 	if err := dec.Decode(&slice); err != nil {
 		return err
 	}
-	c.s = skipset.New[T]()
+	c.Clear()
 	for _, elem := range slice {
 		c.s.Add(elem)
 	}

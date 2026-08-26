@@ -41,8 +41,15 @@ func (c *concurrentSkipMap[K, V]) Size() int { return c.m.Len() }
 func (c *concurrentSkipMap[K, V]) IsEmpty() bool    { return c.Size() == 0 }
 func (c *concurrentSkipMap[K, V]) IsNotEmpty() bool { return !c.IsEmpty() }
 
-// Clear removes all entries by resetting the underlying structure.
-func (c *concurrentSkipMap[K, V]) Clear() { c.m = skipmap.New[K, V]() }
+// Clear removes all entries one by one, so concurrent readers and writers
+// stay safe. Best-effort under concurrency: entries inserted while Clear
+// runs may survive it.
+func (c *concurrentSkipMap[K, V]) Clear() {
+	c.m.Range(func(k K, _ V) bool {
+		c.m.Delete(k)
+		return true
+	})
+}
 
 // String returns a concise representation (ascending by key).
 func (c *concurrentSkipMap[K, V]) String() string {
@@ -432,6 +439,8 @@ func (c *concurrentSkipMap[K, V]) PopFirst() (Entry[K, V], bool) {
 }
 
 // PopLast removes and returns the largest-key entry (best-effort).
+// O(n) per call: the skip list cannot iterate backwards, so finding the
+// largest key scans the whole map; draining a map this way is O(n²).
 func (c *concurrentSkipMap[K, V]) PopLast() (Entry[K, V], bool) {
 	for {
 		e, ok := c.LastEntry()
@@ -757,7 +766,7 @@ func (c *concurrentSkipMap[K, V]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &wrapped); err != nil {
 		return err
 	}
-	c.m = skipmap.New[K, V]()
+	c.Clear()
 	for _, entry := range wrapped.Entries {
 		c.m.Store(entry.Key, entry.Value)
 	}
@@ -791,7 +800,7 @@ func (c *concurrentSkipMap[K, V]) GobDecode(data []byte) error {
 	if err := dec.Decode(&entries); err != nil {
 		return err
 	}
-	c.m = skipmap.New[K, V]()
+	c.Clear()
 	for _, entry := range entries {
 		c.m.Store(entry.Key, entry.Value)
 	}

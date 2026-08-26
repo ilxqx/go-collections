@@ -3,6 +3,7 @@ package collections
 import (
 	"runtime"
 	"slices"
+	"sync"
 	"testing"
 	"testing/synctest"
 
@@ -813,4 +814,25 @@ func TestConcurrentSkipMap_IsNotEmpty(t *testing.T) {
 	require.False(t, m.IsNotEmpty(), "new map should not be non-empty")
 	m.Put(1, "a")
 	require.True(t, m.IsNotEmpty(), "map with entry should be non-empty")
+}
+
+// Regression: Clear used to swap the underlying skip list pointer without
+// synchronization, racing with every concurrent accessor.
+func TestConcurrentSkipMap_ClearConcurrentWithPut(t *testing.T) {
+	t.Parallel()
+	m := NewConcurrentSkipMap[int, int]()
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for i := range 2000 {
+			m.Put(i%10, i)
+		}
+	})
+	wg.Go(func() {
+		for range 2000 {
+			m.Clear()
+		}
+	})
+	wg.Wait()
+	m.Clear()
+	require.Equal(t, 0, m.Size(), "quiescent Clear should leave the map empty")
 }
