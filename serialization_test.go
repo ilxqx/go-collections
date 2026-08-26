@@ -320,45 +320,45 @@ func TestLinkedListSerializationTestSuite(t *testing.T) {
 }
 
 // ==========================
-// 4. SegmentedList Serialization Tests
+// 4. SyncList Serialization Tests
 // ==========================
 
-type SegmentedListSerializationTestSuite struct {
+type SyncListSerializationTestSuite struct {
 	suite.Suite
 }
 
-func (s *SegmentedListSerializationTestSuite) TestEmptyList() {
+func (s *SyncListSerializationTestSuite) TestEmptyList() {
 	s.Run("JSON", func() {
-		original := NewSegmentedList[int]()
+		original := NewSyncList[int]()
 		data, err := json.Marshal(original)
 		s.Require().NoError(err, "Marshal should succeed")
 
-		restored := NewSegmentedList[int]()
+		restored := NewSyncList[int]()
 		err = json.Unmarshal(data, restored)
 		s.Require().NoError(err, "Unmarshal should succeed")
 		s.Equal(0, restored.Size(), "Size should be zero")
 	})
 
 	s.Run("Gob", func() {
-		original := NewSegmentedList[int]()
+		original := NewSyncList[int]()
 		var buf bytes.Buffer
 		err := gob.NewEncoder(&buf).Encode(original)
 		s.Require().NoError(err, "Gob encode should succeed")
 
-		restored := NewSegmentedList[int]()
+		restored := NewSyncList[int]()
 		err = gob.NewDecoder(&buf).Decode(restored)
 		s.Require().NoError(err, "Gob decode should succeed")
 		s.Equal(0, restored.Size(), "Size should be zero")
 	})
 }
 
-func (s *SegmentedListSerializationTestSuite) TestMultipleElements() {
+func (s *SyncListSerializationTestSuite) TestMultipleElements() {
 	s.Run("JSON", func() {
-		original := NewSegmentedListFrom(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+		original := NewSyncListFrom(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
 		data, err := json.Marshal(original)
 		s.Require().NoError(err, "Marshal should succeed")
 
-		restored := NewSegmentedList[int]()
+		restored := NewSyncList[int]()
 		err = json.Unmarshal(data, restored)
 		s.Require().NoError(err, "Unmarshal should succeed")
 		s.Equal(original.Size(), restored.Size(), "Size should match")
@@ -366,12 +366,12 @@ func (s *SegmentedListSerializationTestSuite) TestMultipleElements() {
 	})
 
 	s.Run("Gob", func() {
-		original := NewSegmentedListFrom(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+		original := NewSyncListFrom(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
 		var buf bytes.Buffer
 		err := gob.NewEncoder(&buf).Encode(original)
 		s.Require().NoError(err, "Gob encode should succeed")
 
-		restored := NewSegmentedList[int]()
+		restored := NewSyncList[int]()
 		err = gob.NewDecoder(&buf).Decode(restored)
 		s.Require().NoError(err, "Gob decode should succeed")
 		s.Equal(original.Size(), restored.Size(), "Size should match")
@@ -379,8 +379,8 @@ func (s *SegmentedListSerializationTestSuite) TestMultipleElements() {
 	})
 }
 
-func TestSegmentedListSerializationTestSuite(t *testing.T) {
-	suite.Run(t, new(SegmentedListSerializationTestSuite))
+func TestSyncListSerializationTestSuite(t *testing.T) {
+	suite.Run(t, new(SyncListSerializationTestSuite))
 }
 
 // ==========================

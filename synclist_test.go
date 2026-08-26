@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSegmentedList_Basic(t *testing.T) {
+func TestSyncList_Basic(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedList[int]()
+	l := NewSyncList[int]()
 
 	assert.True(t, l.IsEmpty(), "New list should be empty")
 	assert.Equal(t, 0, l.Size(), "Empty list should have size 0")
@@ -35,9 +35,9 @@ func TestSegmentedList_Basic(t *testing.T) {
 	assert.Equal(t, 3, v, "Last should return last element")
 }
 
-func TestSegmentedList_Set(t *testing.T) {
+func TestSyncList_Set(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3)
+	l := NewSyncListFrom(1, 2, 3)
 
 	old, ok := l.Set(1, 20)
 	require.True(t, ok, "Set should succeed for valid index")
@@ -51,9 +51,9 @@ func TestSegmentedList_Set(t *testing.T) {
 	require.False(t, ok, "Set should fail for out-of-bounds index")
 }
 
-func TestSegmentedList_Insert(t *testing.T) {
+func TestSyncList_Insert(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 3)
+	l := NewSyncListFrom(1, 3)
 
 	require.True(t, l.Insert(1, 2), "Insert should succeed for valid index")
 
@@ -71,9 +71,9 @@ func TestSegmentedList_Insert(t *testing.T) {
 	assert.Equal(t, 4, v, "Insert at tail should update last element")
 }
 
-func TestSegmentedList_InsertAll(t *testing.T) {
+func TestSyncList_InsertAll(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 5)
+	l := NewSyncListFrom(1, 5)
 
 	require.True(t, l.InsertAll(1, 2, 3, 4), "InsertAll should succeed")
 
@@ -81,9 +81,9 @@ func TestSegmentedList_InsertAll(t *testing.T) {
 	assert.True(t, slices.Equal(l.ToSlice(), expected), "InsertAll should insert in order")
 }
 
-func TestSegmentedList_Remove(t *testing.T) {
+func TestSyncList_Remove(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3, 2, 4)
+	l := NewSyncListFrom(1, 2, 3, 2, 4)
 
 	// Remove first occurrence
 	assert.True(t, l.Remove(2, intEq), "Remove should delete first matching element")
@@ -95,9 +95,9 @@ func TestSegmentedList_Remove(t *testing.T) {
 	assert.False(t, l.Remove(99, intEq), "Remove should return false when element not present")
 }
 
-func TestSegmentedList_RemoveAt(t *testing.T) {
+func TestSyncList_RemoveAt(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3)
+	l := NewSyncListFrom(1, 2, 3)
 
 	v, ok := l.RemoveAt(1)
 	require.True(t, ok, "RemoveAt should succeed for valid index")
@@ -107,9 +107,9 @@ func TestSegmentedList_RemoveAt(t *testing.T) {
 	assert.True(t, slices.Equal(l.ToSlice(), expected), "List should reflect removal at index")
 }
 
-func TestSegmentedList_RemoveFirstLast(t *testing.T) {
+func TestSyncList_RemoveFirstLast(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3)
+	l := NewSyncListFrom(1, 2, 3)
 
 	v, ok := l.RemoveFirst()
 	require.True(t, ok, "RemoveFirst should succeed")
@@ -122,9 +122,9 @@ func TestSegmentedList_RemoveFirstLast(t *testing.T) {
 	assert.Equal(t, 1, l.Size(), "List should contain only middle element")
 }
 
-func TestSegmentedList_RemoveFunc(t *testing.T) {
+func TestSyncList_RemoveFunc(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3, 4, 5, 6)
+	l := NewSyncListFrom(1, 2, 3, 4, 5, 6)
 
 	removed := l.RemoveFunc(func(e int) bool { return e%2 == 0 })
 	assert.Equal(t, 3, removed, "RemoveFunc should remove three evens")
@@ -133,9 +133,9 @@ func TestSegmentedList_RemoveFunc(t *testing.T) {
 	assert.True(t, slices.Equal(l.ToSlice(), expected), "Only odds should remain")
 }
 
-func TestSegmentedList_RetainFunc(t *testing.T) {
+func TestSyncList_RetainFunc(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3, 4, 5, 6)
+	l := NewSyncListFrom(1, 2, 3, 4, 5, 6)
 
 	removed := l.RetainFunc(func(e int) bool { return e%2 == 0 })
 	assert.Equal(t, 3, removed, "RetainFunc should remove three odds")
@@ -144,26 +144,26 @@ func TestSegmentedList_RetainFunc(t *testing.T) {
 	assert.True(t, slices.Equal(l.ToSlice(), expected), "Only evens should remain")
 }
 
-func TestSegmentedList_IndexOf(t *testing.T) {
+func TestSyncList_IndexOf(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3, 2, 4)
+	l := NewSyncListFrom(1, 2, 3, 2, 4)
 
 	assert.Equal(t, 1, l.IndexOf(2, intEq), "IndexOf should find first 2 at index 1")
 	assert.Equal(t, 3, l.LastIndexOf(2, intEq), "LastIndexOf should find last 2 at index 3")
 	assert.Equal(t, -1, l.IndexOf(99, intEq), "IndexOf should be -1 for missing value")
 }
 
-func TestSegmentedList_Contains(t *testing.T) {
+func TestSyncList_Contains(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3)
+	l := NewSyncListFrom(1, 2, 3)
 
 	assert.True(t, l.Contains(2, intEq), "Contains should be true for present value")
 	assert.False(t, l.Contains(99, intEq), "Contains should be false for missing value")
 }
 
-func TestSegmentedList_Find(t *testing.T) {
+func TestSyncList_Find(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3, 4, 5)
+	l := NewSyncListFrom(1, 2, 3, 4, 5)
 
 	v, ok := l.Find(func(e int) bool { return e > 3 })
 	require.True(t, ok, "Find should succeed for matching predicate")
@@ -173,9 +173,9 @@ func TestSegmentedList_Find(t *testing.T) {
 	assert.Equal(t, 3, idx, "FindIndex should return first index > 3")
 }
 
-func TestSegmentedList_SubList(t *testing.T) {
+func TestSyncList_SubList(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3, 4, 5)
+	l := NewSyncListFrom(1, 2, 3, 4, 5)
 
 	sub := l.SubList(1, 4)
 	expected := []int{2, 3, 4}
@@ -186,9 +186,9 @@ func TestSegmentedList_SubList(t *testing.T) {
 	assert.True(t, empty.IsEmpty(), "Invalid range should return empty list")
 }
 
-func TestSegmentedList_Reversed(t *testing.T) {
+func TestSyncList_Reversed(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3)
+	l := NewSyncListFrom(1, 2, 3)
 
 	var result []int
 	for v := range l.Reversed() {
@@ -199,36 +199,36 @@ func TestSegmentedList_Reversed(t *testing.T) {
 	assert.True(t, slices.Equal(result, expected), "Reversed should iterate from tail to head")
 }
 
-func TestSegmentedList_Clone(t *testing.T) {
+func TestSyncList_Clone(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3)
+	l := NewSyncListFrom(1, 2, 3)
 	clone := l.Clone()
 
 	l.Add(4)
 	assert.Equal(t, 3, clone.Size(), "Clone should not be affected by original modifications")
 }
 
-func TestSegmentedList_Filter(t *testing.T) {
+func TestSyncList_Filter(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3, 4, 5, 6)
+	l := NewSyncListFrom(1, 2, 3, 4, 5, 6)
 
 	filtered := l.Filter(func(e int) bool { return e%2 == 0 })
 	expected := []int{2, 4, 6}
 	assert.True(t, slices.Equal(filtered.ToSlice(), expected), "Filter should keep only evens")
 }
 
-func TestSegmentedList_Sort(t *testing.T) {
+func TestSyncList_Sort(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(3, 1, 4, 1, 5, 9, 2, 6)
+	l := NewSyncListFrom(3, 1, 4, 1, 5, 9, 2, 6)
 
 	l.Sort(func(a, b int) int { return a - b })
 	expected := []int{1, 1, 2, 3, 4, 5, 6, 9}
 	assert.True(t, slices.Equal(l.ToSlice(), expected), "Sort should produce ascending order")
 }
 
-func TestSegmentedList_AnyEvery(t *testing.T) {
+func TestSyncList_AnyEvery(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(2, 4, 6, 8)
+	l := NewSyncListFrom(2, 4, 6, 8)
 
 	assert.True(t, l.Every(func(e int) bool { return e%2 == 0 }), "Every should be true for evens")
 	assert.False(t, l.Any(func(e int) bool { return e%2 != 0 }), "Any should be false when none match")
@@ -237,26 +237,26 @@ func TestSegmentedList_AnyEvery(t *testing.T) {
 	assert.True(t, l.Any(func(e int) bool { return e%2 != 0 }), "Any should be true after adding an odd")
 }
 
-func TestSegmentedList_Clear(t *testing.T) {
+func TestSyncList_Clear(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3)
+	l := NewSyncListFrom(1, 2, 3)
 	l.Clear()
 
 	assert.True(t, l.IsEmpty(), "List should be empty after Clear")
 }
 
-func TestSegmentedList_AddAll(t *testing.T) {
+func TestSyncList_AddAll(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedList[int]()
+	l := NewSyncList[int]()
 	l.AddAll(1, 2, 3)
 
 	expected := []int{1, 2, 3}
 	assert.True(t, slices.Equal(l.ToSlice(), expected), "AddAll should append all values")
 }
 
-func TestSegmentedList_AddSeq(t *testing.T) {
+func TestSyncList_AddSeq(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedList[int]()
+	l := NewSyncList[int]()
 
 	// Create a sequence
 	seq := func(yield func(int) bool) {
@@ -283,9 +283,9 @@ func TestSegmentedList_AddSeq(t *testing.T) {
 	assert.Equal(t, 6, l.Size(), "Empty sequence should not add elements")
 }
 
-func TestSegmentedList_ForEach(t *testing.T) {
+func TestSyncList_ForEach(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3, 4, 5)
+	l := NewSyncListFrom(1, 2, 3, 4, 5)
 
 	var sum int
 	var count int
@@ -307,10 +307,10 @@ func TestSegmentedList_ForEach(t *testing.T) {
 	assert.Equal(t, 3, earlyCount, "ForEach should stop when predicate returns false")
 }
 
-func TestSegmentedList_Concurrent(t *testing.T) {
+func TestSyncList_Concurrent(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
-		l := NewSegmentedList[int]()
+		l := NewSyncList[int]()
 		const goroutines = 100
 		const opsPerGoroutine = 100
 
@@ -342,9 +342,9 @@ func TestSegmentedList_Concurrent(t *testing.T) {
 	})
 }
 
-func TestSegmentedList_GetScenarios(t *testing.T) {
+func TestSyncList_GetScenarios(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3, 4, 5)
+	l := NewSyncListFrom(1, 2, 3, 4, 5)
 
 	// Get valid indices
 	for i := range 5 {
@@ -365,38 +365,37 @@ func TestSegmentedList_GetScenarios(t *testing.T) {
 	require.False(t, ok, "Get should fail for negative index")
 
 	// Get on empty list
-	empty := NewSegmentedList[int]()
+	empty := NewSyncList[int]()
 	_, ok = empty.Get(0)
 	require.False(t, ok, "Get should fail on empty list")
 }
 
-func TestSegmentedList_CustomSegments(t *testing.T) {
+func TestSyncList_ManyElements(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListWithSegments[int](4)
+	l := NewSyncList[int]()
 	for i := range 100 {
 		l.Add(i)
 	}
 
 	assert.Equal(t, 100, l.Size(), "Size should be 100 after adds")
 
-	// Verify Get works across segments
 	for i := range 100 {
 		v, ok := l.Get(i)
 		require.True(t, ok, "Get should succeed for valid index")
-		assert.Equal(t, i, v, "Get should return correct value across segments")
+		assert.Equal(t, i, v, "Get should return correct value")
 	}
 }
 
-func TestSegmentedList_String(t *testing.T) {
+func TestSyncList_String(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3)
+	l := NewSyncListFrom(1, 2, 3)
 	s := l.String()
 
-	assert.Equal(t, "segmentedList{1, 2, 3}", s, "String should render type and values")
+	assert.Equal(t, "syncList{1, 2, 3}", s, "String should render type and values")
 }
 
-func BenchmarkSegmentedList_Read(b *testing.B) {
-	l := NewSegmentedList[int]()
+func BenchmarkSyncList_Read(b *testing.B) {
+	l := NewSyncList[int]()
 	for i := range 1000 {
 		l.Add(i)
 	}
@@ -409,17 +408,23 @@ func BenchmarkSegmentedList_Read(b *testing.B) {
 	})
 }
 
-func BenchmarkSegmentedList_Write(b *testing.B) {
-	l := NewSegmentedList[int]()
+// Steady-state write cost at a fixed size: each iteration adds and removes
+// one element so the list does not grow with b.N.
+func BenchmarkSyncList_Write(b *testing.B) {
+	l := NewSyncList[int]()
+	for i := range 1000 {
+		l.Add(i)
+	}
 
 	b.ResetTimer()
 	for b.Loop() {
 		l.Add(0)
+		l.RemoveLast()
 	}
 }
 
-func BenchmarkSegmentedList_ConcurrentReadWrite(b *testing.B) {
-	l := NewSegmentedList[int]()
+func BenchmarkSyncList_ConcurrentReadWrite(b *testing.B) {
+	l := NewSyncList[int]()
 	for i := range 1000 {
 		l.Add(i)
 	}
@@ -438,9 +443,9 @@ func BenchmarkSegmentedList_ConcurrentReadWrite(b *testing.B) {
 	})
 }
 
-func TestSegmentedList_RemoveAtOutOfBounds(t *testing.T) {
+func TestSyncList_RemoveAtOutOfBounds(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3)
+	l := NewSyncListFrom(1, 2, 3)
 
 	// Valid removal
 	v, ok := l.RemoveAt(1)
@@ -456,14 +461,14 @@ func TestSegmentedList_RemoveAtOutOfBounds(t *testing.T) {
 	require.False(t, ok, "RemoveAt should fail for negative index")
 
 	// Empty list
-	empty := NewSegmentedList[int]()
+	empty := NewSyncList[int]()
 	_, ok = empty.RemoveAt(0)
 	require.False(t, ok, "RemoveAt should fail on empty list")
 }
 
-func TestSegmentedList_LastEmpty(t *testing.T) {
+func TestSyncList_LastEmpty(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedList[int]()
+	l := NewSyncList[int]()
 
 	// Last on empty list
 	_, ok := l.Last()
@@ -481,9 +486,9 @@ func TestSegmentedList_LastEmpty(t *testing.T) {
 	require.False(t, ok, "Last should fail after removing last element")
 }
 
-func TestSegmentedList_InsertAllEmpty(t *testing.T) {
+func TestSyncList_InsertAllEmpty(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3)
+	l := NewSyncListFrom(1, 2, 3)
 
 	// InsertAll with empty elements (returns true, no-op)
 	ok := l.InsertAll(1)
@@ -501,9 +506,9 @@ func TestSegmentedList_InsertAllEmpty(t *testing.T) {
 	require.True(t, slices.Equal(l.ToSlice(), expected), "InsertAll should insert elements at index")
 }
 
-func TestSegmentedList_RemoveLastEmpty(t *testing.T) {
+func TestSyncList_RemoveLastEmpty(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedList[int]()
+	l := NewSyncList[int]()
 
 	// RemoveLast on empty list
 	_, ok := l.RemoveLast()
@@ -517,9 +522,9 @@ func TestSegmentedList_RemoveLastEmpty(t *testing.T) {
 	require.True(t, l.IsEmpty(), "List should be empty after removing last element")
 }
 
-func TestSegmentedList_RemoveFirstEmpty(t *testing.T) {
+func TestSyncList_RemoveFirstEmpty(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedList[int]()
+	l := NewSyncList[int]()
 
 	// RemoveFirst on empty list
 	_, ok := l.RemoveFirst()
@@ -533,9 +538,9 @@ func TestSegmentedList_RemoveFirstEmpty(t *testing.T) {
 	require.True(t, l.IsEmpty(), "List should be empty after removing first element")
 }
 
-func TestSegmentedList_ReversedEmpty(t *testing.T) {
+func TestSyncList_ReversedEmpty(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedList[int]()
+	l := NewSyncList[int]()
 
 	// Reversed on empty list
 	count := 0
@@ -553,9 +558,9 @@ func TestSegmentedList_ReversedEmpty(t *testing.T) {
 	require.Equal(t, []int{42}, result, "Reversed should work for single element")
 }
 
-func TestSegmentedList_EveryEmpty(t *testing.T) {
+func TestSyncList_EveryEmpty(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedList[int]()
+	l := NewSyncList[int]()
 
 	// Every on empty list (vacuous truth)
 	result := l.Every(func(e int) bool { return e > 0 })
@@ -567,9 +572,9 @@ func TestSegmentedList_EveryEmpty(t *testing.T) {
 	require.False(t, result, "Every should return false when some elements don't match")
 }
 
-func TestSegmentedList_FindNotFound(t *testing.T) {
+func TestSyncList_FindNotFound(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3, 4, 5)
+	l := NewSyncListFrom(1, 2, 3, 4, 5)
 
 	// Find with no match
 	_, ok := l.Find(func(e int) bool { return e > 10 })
@@ -580,9 +585,9 @@ func TestSegmentedList_FindNotFound(t *testing.T) {
 	require.Equal(t, -1, idx, "FindIndex should return -1 when no element matches")
 }
 
-func TestSegmentedList_LastIndexOfNotFound(t *testing.T) {
+func TestSyncList_LastIndexOfNotFound(t *testing.T) {
 	t.Parallel()
-	l := NewSegmentedListFrom(1, 2, 3, 4, 5)
+	l := NewSyncListFrom(1, 2, 3, 4, 5)
 
 	// LastIndexOf with no match
 	idx := l.LastIndexOf(10, intEq)
@@ -594,29 +599,9 @@ func TestSegmentedList_LastIndexOfNotFound(t *testing.T) {
 	require.Equal(t, 7, idx, "LastIndexOf should return last occurrence index")
 }
 
-func TestSegmentedList_NewSegmentedListWithSegments(t *testing.T) {
+func TestSyncList_IsNotEmpty(t *testing.T) {
 	t.Parallel()
-
-	// Normal segment size
-	l := NewSegmentedListWithSegments[int](4)
-	require.NotNil(t, l, "NewSegmentedListWithSegments should create list")
-	require.True(t, l.IsEmpty(), "New list should be empty")
-
-	// Very small segment size
-	l2 := NewSegmentedListWithSegments[int](1)
-	l2.AddAll(1, 2, 3, 4, 5)
-	require.Equal(t, 5, l2.Size(), "Small segment size should work")
-
-	// Zero or negative segment size should use default
-	l3 := NewSegmentedListWithSegments[int](0)
-	require.NotNil(t, l3, "Zero segment size should use default")
-	l3.Add(1)
-	require.Equal(t, 1, l3.Size(), "List with default segment should work")
-}
-
-func TestSegmentedList_IsNotEmpty(t *testing.T) {
-	t.Parallel()
-	l := NewSegmentedList[int]()
+	l := NewSyncList[int]()
 	assert.False(t, l.IsNotEmpty(), "new list should not be non-empty")
 	l.Add(1)
 	assert.True(t, l.IsNotEmpty(), "list with element should be non-empty")
