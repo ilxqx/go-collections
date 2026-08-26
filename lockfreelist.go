@@ -6,44 +6,44 @@ import (
 	"encoding/json"
 	"iter"
 	"slices"
-	"sync"
 	"sync/atomic"
 )
 
 // lockFreeList is a lock-free concurrent linked list implementation.
-// Uses Compare-and-Swap (CAS) operations for thread-safe modifications.
-// Based on Harris's lock-free linked list algorithm with logical deletion.
+// Uses Compare-and-Swap (CAS) operations for thread-safe modifications,
+// with logical deletion (nodes are marked deleted, never unlinked).
 //
 // Characteristics:
 //   - Lock-free: Progress guaranteed even if some threads are delayed
 //   - High throughput under contention
-//   - Suitable for high-concurrency scenarios
+//   - Suitable for small, hot lists in high-concurrency scenarios
 //
 // Atomicity:
-//   - ATOMIC: Contains, Add (at head), Size (approximate)
+//   - ATOMIC: Contains, Add, Set (per element), Size (approximate)
 //   - BEST-EFFORT: Remove, Insert (may retry under contention)
 //   - NON-ATOMIC: Bulk operations, iteration (snapshot semantics)
 //
-// ABA Risk: PhysicalDelete uses sync.Pool for node recycling with raw pointer CAS.
-// This may have ABA risk in high-concurrency scenarios where nodes are rapidly
-// recycled and reused. For strict correctness requirements, consider:
-//   - Disabling node pooling (trade GC pressure for safety), or
-//   - Using version-tagged pointers (requires unsafe), or
-//   - Keeping current design for approximate/near-realtime use cases.
+// Structure: head and tail are permanent sentinel nodes — they never change
+// for the lifetime of the list, so every CAS races only on next pointers.
+// Clear detaches the whole chain in one CAS and leaves reclamation to the
+// garbage collector; there is no manual node recycling.
 //
-// Note: This implementation provides the full List[T] interface.
-// Size is approximate due to concurrent modifications; random access Get(index) is O(n).
-// Some operations (iteration, bulk) use snapshot semantics for consistency.
+// Costs to be aware of:
+//   - Add appends by walking the chain, so it is O(n) and building a large
+//     list this way is O(n²).
+//   - Removal is logical: deleted nodes stay in the chain (skipped by every
+//     operation) until Clear detaches them, so traversal cost grows with the
+//     number of removals since the last Clear.
+//   - Size is approximate under concurrent modification; Get(index) is O(n).
 type lockFreeList[T any] struct {
-	head     atomic.Pointer[lfNode[T]]
-	tail     atomic.Pointer[lfNode[T]]
-	size     atomic.Int64
-	eq       Equaler[T]
-	nodePool sync.Pool
+	head *lfNode[T] // permanent sentinel; head.next is the first element
+	tail *lfNode[T] // permanent sentinel terminating the chain
+	size atomic.Int64
+	eq   Equaler[T]
 }
 
 type lfNode[T any] struct {
-	value   T
+	value   atomic.Pointer[T]
 	next    atomic.Pointer[lfNode[T]]
 	deleted atomic.Bool // Logical deletion marker
 }
@@ -52,17 +52,11 @@ type lfNode[T any] struct {
 // The equaler function is used for element comparison.
 func NewLockFreeList[T any](eq Equaler[T]) List[T] {
 	l := &lockFreeList[T]{
-		eq: eq,
-		nodePool: sync.Pool{
-			New: func() any { return &lfNode[T]{} },
-		},
+		eq:   eq,
+		head: &lfNode[T]{},
+		tail: &lfNode[T]{},
 	}
-	// Create sentinel nodes
-	head := &lfNode[T]{}
-	tail := &lfNode[T]{}
-	head.next.Store(tail)
-	l.head.Store(head)
-	l.tail.Store(tail)
+	l.head.next.Store(l.tail)
 	return l
 }
 
@@ -80,12 +74,10 @@ func NewLockFreeListFrom[T any](eq Equaler[T], elements ...T) List[T] {
 	return l
 }
 
-// newNode creates or reuses a node from the pool.
-func (l *lockFreeList[T]) newNode(value T) *lfNode[T] {
-	node := l.nodePool.Get().(*lfNode[T])
-	node.value = value
-	node.next.Store(nil)
-	node.deleted.Store(false)
+// newLFNode creates a node holding value.
+func newLFNode[T any](value T) *lfNode[T] {
+	node := &lfNode[T]{}
+	node.value.Store(&value)
 	return node
 }
 
@@ -103,14 +95,17 @@ func (l *lockFreeList[T]) IsEmpty() bool {
 // IsNotEmpty reports whether the list contains at least one element.
 func (l *lockFreeList[T]) IsNotEmpty() bool { return !l.IsEmpty() }
 
-// Clear removes all elements (not truly lock-free, uses snapshot).
+// Clear removes all elements by detaching the chain from the head sentinel.
+// The sentinels stay in place, so operations racing with Clear keep a valid
+// chain to work on; an element added concurrently with Clear may be detached
+// with the old chain (it linearizes before the Clear).
 func (l *lockFreeList[T]) Clear() {
-	// Reset to sentinel nodes
-	head := &lfNode[T]{}
-	tail := &lfNode[T]{}
-	head.next.Store(tail)
-	l.head.Store(head)
-	l.tail.Store(tail)
+	for {
+		first := l.head.next.Load()
+		if l.head.next.CompareAndSwap(first, l.tail) {
+			break
+		}
+	}
 	l.size.Store(0)
 }
 
@@ -121,13 +116,10 @@ func (l *lockFreeList[T]) ToSlice() []T {
 		return nil
 	}
 	result := make([]T, 0, size)
-	head := l.head.Load()
-	tail := l.tail.Load()
-
-	curr := head.next.Load()
-	for curr != nil && curr != tail {
+	curr := l.head.next.Load()
+	for curr != nil && curr != l.tail {
 		if !curr.deleted.Load() {
-			result = append(result, curr.value)
+			result = append(result, *curr.value.Load())
 		}
 		curr = curr.next.Load()
 	}
@@ -161,15 +153,13 @@ func (l *lockFreeList[T]) Get(index int) (T, bool) {
 		return zero, false
 	}
 
-	head := l.head.Load()
-	tail := l.tail.Load()
-	curr := head.next.Load()
+	curr := l.head.next.Load()
 	i := 0
 
-	for curr != nil && curr != tail {
+	for curr != nil && curr != l.tail {
 		if !curr.deleted.Load() {
 			if i == index {
-				return curr.value, true
+				return *curr.value.Load(), true
 			}
 			i++
 		}
@@ -181,23 +171,21 @@ func (l *lockFreeList[T]) Get(index int) (T, bool) {
 }
 
 // Set replaces the element at index (O(n) operation).
+// The value swap itself is atomic per node.
 func (l *lockFreeList[T]) Set(index int, element T) (T, bool) {
 	if index < 0 {
 		var zero T
 		return zero, false
 	}
 
-	head := l.head.Load()
-	tail := l.tail.Load()
-	curr := head.next.Load()
+	curr := l.head.next.Load()
 	i := 0
 
-	for curr != nil && curr != tail {
+	for curr != nil && curr != l.tail {
 		if !curr.deleted.Load() {
 			if i == index {
-				old := curr.value
-				curr.value = element
-				return old, true
+				old := curr.value.Swap(&element)
+				return *old, true
 			}
 			i++
 		}
@@ -210,13 +198,11 @@ func (l *lockFreeList[T]) Set(index int, element T) (T, bool) {
 
 // First returns the first element.
 func (l *lockFreeList[T]) First() (T, bool) {
-	head := l.head.Load()
-	tail := l.tail.Load()
-	curr := head.next.Load()
+	curr := l.head.next.Load()
 
-	for curr != nil && curr != tail {
+	for curr != nil && curr != l.tail {
 		if !curr.deleted.Load() {
-			return curr.value, true
+			return *curr.value.Load(), true
 		}
 		curr = curr.next.Load()
 	}
@@ -228,11 +214,9 @@ func (l *lockFreeList[T]) First() (T, bool) {
 // Last returns the last element (O(n) operation).
 func (l *lockFreeList[T]) Last() (T, bool) {
 	var last *lfNode[T]
-	head := l.head.Load()
-	tail := l.tail.Load()
-	curr := head.next.Load()
+	curr := l.head.next.Load()
 
-	for curr != nil && curr != tail {
+	for curr != nil && curr != l.tail {
 		if !curr.deleted.Load() {
 			last = curr
 		}
@@ -240,31 +224,29 @@ func (l *lockFreeList[T]) Last() (T, bool) {
 	}
 
 	if last != nil {
-		return last.value, true
+		return *last.value.Load(), true
 	}
 	var zero T
 	return zero, false
 }
 
-// Add appends the element at the end.
+// Add appends the element at the end (O(n): walks the chain to find it).
 func (l *lockFreeList[T]) Add(element T) {
-	newNode := l.newNode(element)
-	tail := l.tail.Load()
+	node := newLFNode(element)
 
 	for {
-		// Find the actual last node (before tail)
-		head := l.head.Load()
-		pred := head
-		curr := head.next.Load()
+		// Find the actual last node (before the tail sentinel)
+		pred := l.head
+		curr := pred.next.Load()
 
-		for curr != nil && curr != tail {
+		for curr != nil && curr != l.tail {
 			pred = curr
 			curr = curr.next.Load()
 		}
 
 		// Try to insert before tail
-		newNode.next.Store(tail)
-		if pred.next.CompareAndSwap(tail, newNode) {
+		node.next.Store(l.tail)
+		if pred.next.CompareAndSwap(l.tail, node) {
 			l.size.Add(1)
 			return
 		}
@@ -295,17 +277,15 @@ func (l *lockFreeList[T]) Insert(index int, element T) bool {
 		return l.insertAtHead(element)
 	}
 
-	newNode := l.newNode(element)
+	node := newLFNode(element)
 
 	for {
-		head := l.head.Load()
-		tail := l.tail.Load()
-		pred := head
-		curr := head.next.Load()
+		pred := l.head
+		curr := pred.next.Load()
 		i := 0
 
 		// Find the node at position (index-1) to insert after it
-		for curr != nil && curr != tail {
+		for curr != nil && curr != l.tail {
 			if !curr.deleted.Load() {
 				if i == index-1 {
 					// Found the predecessor, insert after curr
@@ -321,13 +301,13 @@ func (l *lockFreeList[T]) Insert(index int, element T) bool {
 		// Check if index is out of bounds
 		// Note: when i == index-1, we found the right position to insert after
 		// When curr == tail && i < index-1, index is beyond current size
-		if i != index-1 && curr == tail && i < index-1 {
+		if i != index-1 && curr == l.tail && i < index-1 {
 			return false // Index out of bounds
 		}
 
 		next := pred.next.Load()
-		newNode.next.Store(next)
-		if pred.next.CompareAndSwap(next, newNode) {
+		node.next.Store(next)
+		if pred.next.CompareAndSwap(next, node) {
 			l.size.Add(1)
 			return true
 		}
@@ -337,13 +317,12 @@ func (l *lockFreeList[T]) Insert(index int, element T) bool {
 
 // insertAtHead inserts at the beginning.
 func (l *lockFreeList[T]) insertAtHead(element T) bool {
-	newNode := l.newNode(element)
+	node := newLFNode(element)
 
 	for {
-		head := l.head.Load()
-		first := head.next.Load()
-		newNode.next.Store(first)
-		if head.next.CompareAndSwap(first, newNode) {
+		first := l.head.next.Load()
+		node.next.Store(first)
+		if l.head.next.CompareAndSwap(first, node) {
 			l.size.Add(1)
 			return true
 		}
@@ -372,18 +351,16 @@ func (l *lockFreeList[T]) RemoveAt(index int) (T, bool) {
 	}
 
 	for {
-		head := l.head.Load()
-		tail := l.tail.Load()
-		curr := head.next.Load()
+		curr := l.head.next.Load()
 		i := 0
 
-		for curr != nil && curr != tail {
+		for curr != nil && curr != l.tail {
 			if !curr.deleted.Load() {
 				if i == index {
 					// Logically delete
 					if curr.deleted.CompareAndSwap(false, true) {
 						l.size.Add(-1)
-						return curr.value, true
+						return *curr.value.Load(), true
 					}
 					// Someone else deleted it, retry
 					break
@@ -393,7 +370,7 @@ func (l *lockFreeList[T]) RemoveAt(index int) (T, bool) {
 			curr = curr.next.Load()
 		}
 
-		if curr == nil || curr == tail {
+		if curr == nil || curr == l.tail {
 			var zero T
 			return zero, false
 		}
@@ -402,12 +379,10 @@ func (l *lockFreeList[T]) RemoveAt(index int) (T, bool) {
 
 // Remove removes the first occurrence of element.
 func (l *lockFreeList[T]) Remove(element T, eq Equaler[T]) bool {
-	head := l.head.Load()
-	tail := l.tail.Load()
-	curr := head.next.Load()
+	curr := l.head.next.Load()
 
-	for curr != nil && curr != tail {
-		if !curr.deleted.Load() && eq(curr.value, element) {
+	for curr != nil && curr != l.tail {
+		if !curr.deleted.Load() && eq(*curr.value.Load(), element) {
 			if curr.deleted.CompareAndSwap(false, true) {
 				l.size.Add(-1)
 				return true
@@ -421,15 +396,13 @@ func (l *lockFreeList[T]) Remove(element T, eq Equaler[T]) bool {
 
 // RemoveFirst removes and returns the first element.
 func (l *lockFreeList[T]) RemoveFirst() (T, bool) {
-	head := l.head.Load()
-	tail := l.tail.Load()
-	curr := head.next.Load()
+	curr := l.head.next.Load()
 
-	for curr != nil && curr != tail {
+	for curr != nil && curr != l.tail {
 		if !curr.deleted.Load() {
 			if curr.deleted.CompareAndSwap(false, true) {
 				l.size.Add(-1)
-				return curr.value, true
+				return *curr.value.Load(), true
 			}
 			// Someone else deleted it, try next
 		}
@@ -444,11 +417,9 @@ func (l *lockFreeList[T]) RemoveFirst() (T, bool) {
 func (l *lockFreeList[T]) RemoveLast() (T, bool) {
 	for {
 		var last *lfNode[T]
-		head := l.head.Load()
-		tail := l.tail.Load()
-		curr := head.next.Load()
+		curr := l.head.next.Load()
 
-		for curr != nil && curr != tail {
+		for curr != nil && curr != l.tail {
 			if !curr.deleted.Load() {
 				last = curr
 			}
@@ -462,7 +433,7 @@ func (l *lockFreeList[T]) RemoveLast() (T, bool) {
 
 		if last.deleted.CompareAndSwap(false, true) {
 			l.size.Add(-1)
-			return last.value, true
+			return *last.value.Load(), true
 		}
 		// Retry if CAS failed
 	}
@@ -471,12 +442,10 @@ func (l *lockFreeList[T]) RemoveLast() (T, bool) {
 // RemoveFunc removes all elements satisfying predicate.
 func (l *lockFreeList[T]) RemoveFunc(predicate func(element T) bool) int {
 	removed := 0
-	head := l.head.Load()
-	tail := l.tail.Load()
-	curr := head.next.Load()
+	curr := l.head.next.Load()
 
-	for curr != nil && curr != tail {
-		if !curr.deleted.Load() && predicate(curr.value) {
+	for curr != nil && curr != l.tail {
+		if !curr.deleted.Load() && predicate(*curr.value.Load()) {
 			if curr.deleted.CompareAndSwap(false, true) {
 				l.size.Add(-1)
 				removed++
@@ -490,12 +459,10 @@ func (l *lockFreeList[T]) RemoveFunc(predicate func(element T) bool) int {
 // RetainFunc keeps only elements satisfying predicate.
 func (l *lockFreeList[T]) RetainFunc(predicate func(element T) bool) int {
 	removed := 0
-	head := l.head.Load()
-	tail := l.tail.Load()
-	curr := head.next.Load()
+	curr := l.head.next.Load()
 
-	for curr != nil && curr != tail {
-		if !curr.deleted.Load() && !predicate(curr.value) {
+	for curr != nil && curr != l.tail {
+		if !curr.deleted.Load() && !predicate(*curr.value.Load()) {
 			if curr.deleted.CompareAndSwap(false, true) {
 				l.size.Add(-1)
 				removed++
@@ -508,14 +475,12 @@ func (l *lockFreeList[T]) RetainFunc(predicate func(element T) bool) int {
 
 // IndexOf returns the index of the first occurrence.
 func (l *lockFreeList[T]) IndexOf(element T, eq Equaler[T]) int {
-	head := l.head.Load()
-	tail := l.tail.Load()
-	curr := head.next.Load()
+	curr := l.head.next.Load()
 	i := 0
 
-	for curr != nil && curr != tail {
+	for curr != nil && curr != l.tail {
 		if !curr.deleted.Load() {
-			if eq(curr.value, element) {
+			if eq(*curr.value.Load(), element) {
 				return i
 			}
 			i++
@@ -527,15 +492,13 @@ func (l *lockFreeList[T]) IndexOf(element T, eq Equaler[T]) int {
 
 // LastIndexOf returns the index of the last occurrence.
 func (l *lockFreeList[T]) LastIndexOf(element T, eq Equaler[T]) int {
-	head := l.head.Load()
-	tail := l.tail.Load()
-	curr := head.next.Load()
+	curr := l.head.next.Load()
 	lastIdx := -1
 	i := 0
 
-	for curr != nil && curr != tail {
+	for curr != nil && curr != l.tail {
 		if !curr.deleted.Load() {
-			if eq(curr.value, element) {
+			if eq(*curr.value.Load(), element) {
 				lastIdx = i
 			}
 			i++
@@ -552,13 +515,13 @@ func (l *lockFreeList[T]) Contains(element T, eq Equaler[T]) bool {
 
 // Find returns the first element satisfying predicate.
 func (l *lockFreeList[T]) Find(predicate func(element T) bool) (T, bool) {
-	head := l.head.Load()
-	tail := l.tail.Load()
-	curr := head.next.Load()
+	curr := l.head.next.Load()
 
-	for curr != nil && curr != tail {
-		if !curr.deleted.Load() && predicate(curr.value) {
-			return curr.value, true
+	for curr != nil && curr != l.tail {
+		if !curr.deleted.Load() {
+			if v := *curr.value.Load(); predicate(v) {
+				return v, true
+			}
 		}
 		curr = curr.next.Load()
 	}
@@ -569,14 +532,12 @@ func (l *lockFreeList[T]) Find(predicate func(element T) bool) (T, bool) {
 
 // FindIndex returns the index of the first element satisfying predicate.
 func (l *lockFreeList[T]) FindIndex(predicate func(element T) bool) int {
-	head := l.head.Load()
-	tail := l.tail.Load()
-	curr := head.next.Load()
+	curr := l.head.next.Load()
 	i := 0
 
-	for curr != nil && curr != tail {
+	for curr != nil && curr != l.tail {
 		if !curr.deleted.Load() {
-			if predicate(curr.value) {
+			if predicate(*curr.value.Load()) {
 				return i
 			}
 			i++
@@ -623,7 +584,7 @@ func (l *lockFreeList[T]) Filter(predicate func(element T) bool) List[T] {
 	return NewLockFreeListFrom(l.eq, result...)
 }
 
-// Sort sorts elements (creates a new internal structure).
+// Sort sorts elements (snapshot, clear and rebuild; not atomic as a whole).
 func (l *lockFreeList[T]) Sort(cmp Comparator[T]) {
 	snap := l.ToSlice()
 	slices.SortFunc(snap, cmp)
@@ -643,42 +604,15 @@ func (l *lockFreeList[T]) Any(predicate func(element T) bool) bool {
 
 // Every returns true if all elements satisfy predicate.
 func (l *lockFreeList[T]) Every(predicate func(element T) bool) bool {
-	head := l.head.Load()
-	tail := l.tail.Load()
-	curr := head.next.Load()
+	curr := l.head.next.Load()
 
-	for curr != nil && curr != tail {
-		if !curr.deleted.Load() && !predicate(curr.value) {
+	for curr != nil && curr != l.tail {
+		if !curr.deleted.Load() && !predicate(*curr.value.Load()) {
 			return false
 		}
 		curr = curr.next.Load()
 	}
 	return true
-}
-
-// PhysicalDelete removes logically deleted nodes (garbage collection).
-// This should be called periodically to reclaim memory.
-func (l *lockFreeList[T]) PhysicalDelete() {
-	head := l.head.Load()
-	tail := l.tail.Load()
-	pred := head
-	curr := head.next.Load()
-
-	for curr != nil && curr != tail {
-		next := curr.next.Load()
-		if curr.deleted.Load() {
-			// Try to unlink
-			pred.next.CompareAndSwap(curr, next)
-			// Return node to pool
-			var zero T
-			curr.value = zero
-			curr.next.Store(nil)
-			l.nodePool.Put(curr)
-		} else {
-			pred = curr
-		}
-		curr = next
-	}
 }
 
 // ==========================

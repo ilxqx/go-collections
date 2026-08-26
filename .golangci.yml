@@ -113,10 +113,10 @@ linters:
       - linters: [revive]
         text: "empty-block"
 
-      # sync.Pool.Get and container/heap return `any` by design; the only
-      # value either ever holds here is this package's own node type, so the
-      # assertion's panic is the check — an ok-branch would be dead code.
-      - path: '(lockfreelist|priorityqueue)\.go'
+      # container/heap passes `any` by design; the only value it ever holds
+      # here is this package's own element type, so the assertion's panic is
+      # the check — an ok-branch would be dead code.
+      - path: 'priorityqueue\.go'
         linters: [revive]
         text: "unchecked-type-assertion"
 

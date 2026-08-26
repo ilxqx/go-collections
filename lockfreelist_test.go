@@ -2,6 +2,7 @@ package collections
 
 import (
 	"slices"
+	"sync"
 	"testing"
 	"testing/synctest"
 
@@ -365,17 +366,17 @@ func TestLockFreeList_WithEqualer(t *testing.T) {
 	assert.True(t, l.Contains(person{"Alice", 0}, eq), "Contains should match by name only")
 }
 
+// Add is O(n) and removals are logical, so a single growing list has no
+// steady state; measure building a fixed-size list per iteration instead.
 func BenchmarkLockFreeList_Add(b *testing.B) {
-	l := NewLockFreeListOrdered[int]()
-
-	b.ResetTimer()
-	b.RunParallel(func(pb *testing.PB) {
-		i := 0
-		for pb.Next() {
+	const n = 100
+	b.ReportAllocs()
+	for b.Loop() {
+		l := NewLockFreeListOrdered[int]()
+		for i := range n {
 			l.Add(i)
-			i++
 		}
-	})
+	}
 }
 
 func BenchmarkLockFreeList_Read(b *testing.B) {
@@ -491,44 +492,49 @@ func TestLockFreeList_ForEach(t *testing.T) {
 	assert.Equal(t, 3, earlyCount, "ForEach should stop when predicate returns false")
 }
 
-func TestLockFreeList_PhysicalDelete(t *testing.T) {
+// Regression: Set used to write the node value non-atomically, racing with
+// every concurrent reader.
+func TestLockFreeList_SetConcurrentWithReaders(t *testing.T) {
+	t.Parallel()
+	l := NewLockFreeListFrom(func(a, b int) bool { return a == b }, 1, 2, 3)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for i := range 2000 {
+			l.Set(0, i)
+		}
+	})
+	wg.Go(func() {
+		for range 2000 {
+			l.ToSlice()
+			l.First()
+		}
+	})
+	wg.Wait()
+	v, ok := l.Get(0)
+	require.True(t, ok, "element 0 should still exist")
+	assert.Equal(t, 1999, v, "last Set value should win once writers stop")
+}
+
+// Regression: Clear used to replace the head and tail sentinels, and Add
+// cached the old tail — a Clear racing with Add livelocked the Add forever.
+func TestLockFreeList_ClearConcurrentWithAdd(t *testing.T) {
 	t.Parallel()
 	l := NewLockFreeListOrdered[int]()
-	const n = 1000
-	// Build list 0..n-1
-	for i := range n {
-		l.Add(i)
-	}
-	// Logically delete all even numbers
-	removed := l.RemoveFunc(func(v int) bool { return v%2 == 0 })
-	require.Equal(t, n/2, removed, "Removed count should equal half of the elements")
-
-	// Snapshot should only contain odds
-	snapBefore := l.ToSlice()
-	require.Len(t, snapBefore, n/2, "Snapshot should contain half the elements")
-	for _, v := range snapBefore {
-		assert.Equal(t, 1, v%2, "Snapshot before physical delete should contain only odd numbers")
-	}
-
-	// Physical deletion should unlink logically deleted nodes without changing visible semantics
-	lf, ok := l.(*lockFreeList[int])
-	require.True(t, ok, "list should be *lockFreeList")
-	lf.PhysicalDelete()
-
-	// Snapshot after physical delete remains the same (odds only)
-	snapAfter := l.ToSlice()
-	require.Len(t, snapAfter, n/2, "Snapshot should still contain half the elements")
-	for _, v := range snapAfter {
-		assert.Equal(t, 1, v%2, "Snapshot after physical delete should contain only odd numbers")
-	}
-
-	// Idempotency: calling PhysicalDelete again should not change content
-	lf.PhysicalDelete()
-	snapAgain := l.ToSlice()
-	require.Len(t, snapAgain, n/2, "Snapshot should remain unchanged after repeat delete")
-	for i := range snapAfter {
-		assert.Equal(t, snapAfter[i], snapAgain[i], "Sequence should match expected")
-	}
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for i := range 2000 {
+			l.Add(i)
+		}
+	})
+	wg.Go(func() {
+		for range 2000 {
+			l.Clear()
+		}
+	})
+	wg.Wait()
+	l.Clear()
+	assert.Empty(t, l.ToSlice(), "quiescent Clear should leave the list empty")
+	assert.Equal(t, 0, l.Size(), "quiescent Clear should reset the size")
 }
 
 func TestLockFreeList_NewLockFreeListOrderedCoverage(t *testing.T) {
