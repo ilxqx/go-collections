@@ -490,12 +490,19 @@ func BenchmarkCOWList_Read(b *testing.B) {
 	})
 }
 
+// Steady-state write cost at a fixed size: each iteration adds and removes
+// one element, so every measured copy is of a 1000-element slice. A bare Add
+// loop would grow the list and measure a different copy size each iteration.
 func BenchmarkCOWList_Write(b *testing.B) {
 	l := NewCOWList[int]()
+	for i := range 1000 {
+		l.Add(i)
+	}
 
 	b.ResetTimer()
 	for b.Loop() {
 		l.Add(0)
+		l.RemoveLast()
 	}
 }
 

@@ -5,20 +5,29 @@ import (
 	"testing"
 )
 
+// Build and lookup are measured separately: a shared container would make the
+// first iteration insert and every later one overwrite, so no single number
+// would describe either operation.
 func BenchmarkHashSet_AddContains(b *testing.B) {
 	for _, n := range []int{1e3, 1e4, 5e4} {
-		b.Run("n="+strconv.Itoa(n), func(b *testing.B) {
+		vals := make([]int, n)
+		for i := range n {
+			vals[i] = i
+		}
+		b.Run("Add-n="+strconv.Itoa(n), func(b *testing.B) {
 			b.ReportAllocs()
-			s := NewHashSet[int]()
-			vals := make([]int, n)
-			for i := range n {
-				vals[i] = i
-			}
-			b.ResetTimer()
 			for b.Loop() {
+				s := NewHashSet[int]()
 				for _, v := range vals {
 					s.Add(v)
 				}
+			}
+		})
+		b.Run("Contains-n="+strconv.Itoa(n), func(b *testing.B) {
+			b.ReportAllocs()
+			s := NewHashSetFrom(vals...)
+			b.ResetTimer()
+			for b.Loop() {
 				for _, v := range vals {
 					if !s.Contains(v) {
 						b.Fatal("Missing")
@@ -31,18 +40,27 @@ func BenchmarkHashSet_AddContains(b *testing.B) {
 
 func BenchmarkTreeMap_PutGet(b *testing.B) {
 	for _, n := range []int{1e3, 1e4, 5e4} {
-		b.Run("n="+strconv.Itoa(n), func(b *testing.B) {
+		keys := make([]int, n)
+		for i := range n {
+			keys[i] = i
+		}
+		b.Run("Put-n="+strconv.Itoa(n), func(b *testing.B) {
 			b.ReportAllocs()
-			m := NewTreeMapOrdered[int, int]()
-			keys := make([]int, n)
-			for i := range n {
-				keys[i] = i
-			}
-			b.ResetTimer()
 			for b.Loop() {
+				m := NewTreeMapOrdered[int, int]()
 				for _, k := range keys {
 					m.Put(k, k)
 				}
+			}
+		})
+		b.Run("Get-n="+strconv.Itoa(n), func(b *testing.B) {
+			b.ReportAllocs()
+			m := NewTreeMapOrdered[int, int]()
+			for _, k := range keys {
+				m.Put(k, k)
+			}
+			b.ResetTimer()
+			for b.Loop() {
 				for _, k := range keys {
 					if v, ok := m.Get(k); !ok || v != k {
 						b.Fatal("Missing")
