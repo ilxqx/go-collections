@@ -41,7 +41,7 @@ func NewTreeSetOrdered[T Ordered]() SortedSet[T] {
 func NewTreeSetFrom[T any](c Comparator[T], elements ...T) SortedSet[T] {
 	ts := newTreeSet(c)
 	for _, e := range elements {
-		ts.bt.Set(e)
+		ts.add(e)
 	}
 	return ts
 }
@@ -87,17 +87,28 @@ func (t *treeSet[T]) ForEach(action func(element T) bool) {
 	})
 }
 
+// add inserts element only if no comparator-equivalent element is present.
+// The existing element is kept (never replaced), so a false return always
+// means the set did not change.
+func (t *treeSet[T]) add(element T) bool {
+	if _, ok := t.bt.Get(element); ok {
+		return false
+	}
+	t.bt.Set(element)
+	return true
+}
+
 // Add inserts element if absent. Returns true if the set changed.
+// If a comparator-equivalent element is already present, it is kept unchanged.
 func (t *treeSet[T]) Add(element T) bool {
-	_, replaced := t.bt.Set(element)
-	return !replaced
+	return t.add(element)
 }
 
 // AddAll inserts all given elements. Returns number added.
 func (t *treeSet[T]) AddAll(elements ...T) int {
 	added := 0
 	for _, e := range elements {
-		if _, replaced := t.bt.Set(e); !replaced {
+		if t.add(e) {
 			added++
 		}
 	}
@@ -108,7 +119,7 @@ func (t *treeSet[T]) AddAll(elements ...T) int {
 func (t *treeSet[T]) AddSeq(seq iter.Seq[T]) int {
 	added := 0
 	for v := range seq {
-		if _, replaced := t.bt.Set(v); !replaced {
+		if t.add(v) {
 			added++
 		}
 	}
@@ -215,7 +226,7 @@ func (t *treeSet[T]) Union(other Set[T]) Set[T] {
 		return true
 	})
 	for v := range other.Seq() {
-		out.bt.Set(v)
+		out.add(v)
 	}
 	return out
 }
@@ -229,7 +240,7 @@ func (t *treeSet[T]) Intersection(other Set[T]) Set[T] {
 	out := newTreeSet(t.cmp)
 	for v := range small.Seq() {
 		if large.Contains(v) {
-			out.bt.Set(v)
+			out.add(v)
 		}
 	}
 	return out
@@ -258,7 +269,7 @@ func (t *treeSet[T]) SymmetricDifference(other Set[T]) Set[T] {
 	})
 	for v := range other.Seq() {
 		if _, ok := t.bt.Get(v); !ok {
-			out.bt.Set(v)
+			out.add(v)
 		}
 	}
 	return out
@@ -577,7 +588,8 @@ func (t *treeSet[T]) TailSet(from T, inclusive bool) SortedSet[T] {
 	return out
 }
 
-// Rank returns the 0-based rank (index) of x; -1 if not present.
+// Rank returns the 0-based rank (index) of x; -1 if not present. O(n): the
+// backing B-tree offers no item-to-rank lookup, so this scans.
 func (t *treeSet[T]) Rank(x T) int {
 	idx := 0
 	found := -1

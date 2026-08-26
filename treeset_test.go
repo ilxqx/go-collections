@@ -3,6 +3,7 @@ package collections
 import (
 	"cmp"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -574,4 +575,32 @@ func TestTreeSet_IsNotEmpty(t *testing.T) {
 	assert.False(t, s.IsNotEmpty(), "new set should not be non-empty")
 	s.Add(1)
 	assert.True(t, s.IsNotEmpty(), "set with element should be non-empty")
+}
+
+// Regression: Add must never replace an existing comparator-equivalent
+// element — a false return promises the set did not change.
+func TestTreeSet_AddKeepsEquivalentElement(t *testing.T) {
+	t.Parallel()
+	caseInsensitive := func(a, b string) int {
+		return strings.Compare(strings.ToLower(a), strings.ToLower(b))
+	}
+
+	s := NewTreeSet(caseInsensitive)
+	assert.True(t, s.Add("a"), "first Add should report a change")
+	assert.False(t, s.Add("A"), "equivalent Add should report no change")
+	assert.Equal(t, []string{"a"}, s.ToSlice(), "existing element should be kept, not replaced")
+
+	assert.Equal(t, 1, s.AddAll("B", "b"), "AddAll should count only distinct elements")
+	assert.Equal(t, []string{"a", "B"}, s.ToSlice(), "AddAll should keep the first of equivalent elements")
+
+	assert.Equal(t, 0, s.AddSeq(slices.Values([]string{"A", "b"})), "AddSeq of equivalents should add nothing")
+	assert.Equal(t, []string{"a", "B"}, s.ToSlice(), "AddSeq should not replace existing elements")
+
+	from := NewTreeSetFrom(caseInsensitive, "x", "X")
+	assert.Equal(t, []string{"x"}, from.ToSlice(), "NewTreeSetFrom should keep the first of equivalent elements")
+
+	cs := NewConcurrentTreeSet(caseInsensitive)
+	assert.True(t, cs.Add("a"), "concurrent first Add should report a change")
+	assert.False(t, cs.Add("A"), "concurrent equivalent Add should report no change")
+	assert.Equal(t, []string{"a"}, cs.ToSlice(), "concurrent set should keep the existing element")
 }
