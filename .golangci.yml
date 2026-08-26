@@ -1,0 +1,133 @@
+version: "2"
+
+# Kept in sync with the config in coldsmirk/go-streams: the enabled set and
+# generic settings are shared; the rule exceptions and their reasons are this
+# project's own.
+linters:
+  default: standard
+  enable:
+    - asciicheck
+    - bidichk
+    - dupword
+    - durationcheck
+    - errorlint
+    - gocritic
+    - godot
+    - gosec
+    - misspell
+    - nilerr
+    - nilnesserr
+    - predeclared
+    - revive
+    - testableexamples
+    - testifylint
+    - unconvert
+    - unparam
+
+  settings:
+    errorlint:
+      errorf: true
+      asserts: true
+      comparison: true
+
+    godot:
+      # Declarations only. A doc comment is published API surface and is held
+      # to sentence form; a note inside a function body is not.
+      scope: declarations
+      capital: false
+
+    gosec:
+      severity: high
+      confidence: high
+
+    misspell:
+      # The prose here is US English throughout.
+      locale: US
+
+    govet:
+      enable-all: true
+      disable:
+        # Field order follows meaning here, not padding.
+        - fieldalignment
+        # Reusing a name in a narrower scope is idiomatic and reads better than
+        # inventing a second one.
+        - shadow
+
+    revive:
+      severity: error
+      # Every rule, minus the exceptions below, each carrying its reason. CI
+      # pins the linter version, so a revive release cannot turn the build red
+      # on its own.
+      enable-all-rules: true
+      rules:
+        # The numbers in a table-driven test are the data. Naming them as
+        # constants moves the case away from the expectation it belongs to.
+        - name: add-constant
+          disabled: true
+
+        # gofmt governs layout.
+        - name: line-length-limit
+          disabled: true
+
+        # The default threshold of 7 rejects ordinary table-driven tests.
+        - name: cognitive-complexity
+          disabled: true
+
+        # The default of 10 is below what an ordinary tree or skip-list
+        # operation already costs. 15 leaves that shape room and still catches
+        # a tangle.
+        - name: cyclomatic
+          arguments: [15]
+
+        # A switch over a closed set needs no default clause.
+        - name: enforce-switch-style
+          arguments: ["allowNoDefault"]
+
+        # Every container here implements the same interfaces from
+        # collection.go, so Size, Put, Get and the rest recur on every type by
+        # design. The rule cannot tell that from a collision.
+        - name: confusing-naming
+          disabled: true
+
+        # HeadSet, TailSet and the skip-structure range queries take an
+        # `inclusive` flag beside the bound it describes — the NavigableSet
+        # shape, published API rather than a control-coupling smell.
+        - name: flag-parameter
+          disabled: true
+
+        # A collections library's public surface is its catalogue of types;
+        # capping public structs at five contradicts the package's purpose.
+        - name: max-public-structs
+          disabled: true
+
+        # A set stores struct{} as its map value type — zero bytes per entry
+        # is the point, not a nested type declaration.
+        - name: nested-structs
+          disabled: true
+
+  exclusions:
+    rules:
+      # Draining an iterator is spelled `for range seq {}` — Go offers no
+      # other form. These blocks are empty on purpose: to consume a Seq to its
+      # end in benchmarks and coverage tests.
+      - linters: [revive]
+        text: "empty-block"
+
+      # sync.Pool.Get and container/heap return `any` by design; the only
+      # value either ever holds here is this package's own node type, so the
+      # assertion's panic is the check — an ok-branch would be dead code.
+      - path: '(lockfreelist|priorityqueue)\.go'
+        linters: [revive]
+        text: "unchecked-type-assertion"
+
+      # A coverage-style test exercises every method of one container in one
+      # function, so its length tracks the size of the contract rather than
+      # any tangle in the test.
+      - path: '_test\.go'
+        linters: [revive]
+        text: "function-length"
+
+issues:
+  # Report every occurrence: a truncated list hides work.
+  max-issues-per-linter: 0
+  max-same-issues: 0

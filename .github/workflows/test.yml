@@ -30,6 +30,14 @@ jobs:
       - name: Download Go modules
         run: go mod download
 
+      - name: Check formatting
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            gofmt -l .
+            echo "::error::the files above are not gofmt-clean"
+            exit 1
+          fi
+
       - name: Run go vet
         run: go vet ./...
 
@@ -62,7 +70,10 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          # Pinned, not "latest": the enabled set lives in .golangci.yml, but a
+          # linter release can still change what an enabled rule reports, and CI
+          # should not go red on a day nobody touched the code.
+          version: v2.13.1
           args: --timeout=5m
 
   modernize:
