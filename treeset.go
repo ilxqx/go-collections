@@ -239,17 +239,16 @@ func (t *treeSet[T]) Union(other Set[T]) Set[T] {
 }
 
 // Intersection returns a new sorted set with common elements.
+// The receiver's elements are tested with other.Contains, so the result
+// holds the receiver's representatives and does not depend on set sizes.
 func (t *treeSet[T]) Intersection(other Set[T]) Set[T] {
-	small, large := Set[T](t), other
-	if other.Size() < t.Size() {
-		small, large = other, t
-	}
 	out := newTreeSet(t.cmp)
-	for v := range small.Seq() {
-		if large.Contains(v) {
-			out.add(v)
+	t.bt.Scan(func(item T) bool {
+		if other.Contains(item) {
+			out.bt.Set(item)
 		}
-	}
+		return true
+	})
 	return out
 }
 
@@ -311,15 +310,9 @@ func (t *treeSet[T]) IsProperSupersetOf(other Set[T]) bool {
 }
 
 // IsDisjoint reports whether t and other share no common elements.
+// The receiver's elements are tested with other.Contains, so the answer
+// does not depend on set sizes.
 func (t *treeSet[T]) IsDisjoint(other Set[T]) bool {
-	if other.Size() < t.Size() {
-		for v := range other.Seq() {
-			if t.Contains(v) {
-				return false
-			}
-		}
-		return true
-	}
 	disjoint := true
 	t.bt.Scan(func(item T) bool {
 		if other.Contains(item) {

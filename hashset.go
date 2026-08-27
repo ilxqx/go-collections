@@ -213,17 +213,14 @@ func (s *hashSet[T]) Union(other Set[T]) Set[T] {
 }
 
 // Intersection returns a new set: s ∩ other.
+// The receiver's elements are tested with other.Contains, so the result
+// holds the receiver's representatives and does not depend on set sizes.
 func (s *hashSet[T]) Intersection(other Set[T]) Set[T] {
-	// Iterate over smaller set to reduce lookups.
-	var small, large Set[T] = s, other
-	if other.Size() < s.Size() {
-		small, large = other, s
-	}
 	// Preallocate up to the size of the smaller set.
 	capacity := min(len(s.m), other.Size())
 	out := NewHashSetWithCapacity[T](capacity)
-	for v := range small.Seq() {
-		if large.Contains(v) {
+	for v := range s.m {
+		if other.Contains(v) {
 			out.Add(v)
 		}
 	}
@@ -284,16 +281,9 @@ func (s *hashSet[T]) IsProperSupersetOf(other Set[T]) bool {
 }
 
 // IsDisjoint reports whether s and other have no elements in common.
+// The receiver's elements are tested with other.Contains, so the answer
+// does not depend on set sizes.
 func (s *hashSet[T]) IsDisjoint(other Set[T]) bool {
-	// Iterate over smaller
-	if other.Size() < s.Size() {
-		for v := range other.Seq() {
-			if s.Contains(v) {
-				return false
-			}
-		}
-		return true
-	}
 	for v := range s.m {
 		if other.Contains(v) {
 			return false

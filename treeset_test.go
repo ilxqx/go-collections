@@ -604,3 +604,27 @@ func TestTreeSet_AddKeepsEquivalentElement(t *testing.T) {
 	assert.False(t, cs.Add("A"), "concurrent equivalent Add should report no change")
 	assert.Equal(t, []string{"a"}, cs.ToSlice(), "concurrent set should keep the existing element")
 }
+
+// Regression: Intersection and IsDisjoint used to iterate whichever set was
+// smaller, so with sets that disagree on equality the answer flipped when an
+// unrelated element changed the relative sizes. The receiver's elements are
+// now always tested with other.Contains.
+func TestTreeSet_IntersectionIndependentOfSizes(t *testing.T) {
+	t.Parallel()
+	ci := func(a, b string) int { return strings.Compare(strings.ToLower(a), strings.ToLower(b)) }
+
+	small := NewTreeSetFrom(ci, "a")
+	big := NewTreeSetFrom(ci, "a", "b")
+	csOther := NewHashSetFrom("A", "x")
+
+	r1 := small.Intersection(csOther)
+	r2 := big.Intersection(NewHashSetFrom("A"))
+	require.Equal(t, r1.Contains("a"), r2.Contains("a"),
+		"whether a/A intersect must not depend on unrelated elements")
+	require.False(t, r1.Contains("a"), "membership is judged by other.Contains (case-sensitive here)")
+
+	require.Equal(t,
+		small.IsDisjoint(csOther),
+		big.IsDisjoint(NewHashSetFrom("A")),
+		"IsDisjoint must not depend on unrelated elements")
+}

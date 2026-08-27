@@ -2,6 +2,7 @@ package collections
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -238,4 +239,23 @@ func TestHashSet_IsNotEmpty(t *testing.T) {
 	assert.False(t, s.IsNotEmpty(), "new set should not be non-empty")
 	s.Add(1)
 	assert.True(t, s.IsNotEmpty(), "set with element should be non-empty")
+}
+
+// Regression: Intersection and IsDisjoint used to iterate whichever set was
+// smaller, flipping which set's equality judged membership. The receiver's
+// elements are now always tested with other.Contains.
+func TestHashSet_IntersectionIndependentOfSizes(t *testing.T) {
+	t.Parallel()
+	ci := func(a, b string) int { return strings.Compare(strings.ToLower(a), strings.ToLower(b)) }
+
+	r1 := NewHashSetFrom("a").Intersection(NewTreeSetFrom(ci, "A", "x"))
+	r2 := NewHashSetFrom("a", "b").Intersection(NewTreeSetFrom(ci, "A"))
+	require.Equal(t, r1.Contains("a"), r2.Contains("a"),
+		"whether a/A intersect must not depend on unrelated elements")
+	require.True(t, r1.Contains("a"), "membership is judged by other.Contains (case-insensitive here)")
+
+	require.Equal(t,
+		NewHashSetFrom("a").IsDisjoint(NewTreeSetFrom(ci, "A", "x")),
+		NewHashSetFrom("a", "b").IsDisjoint(NewTreeSetFrom(ci, "A")),
+		"IsDisjoint must not depend on unrelated elements")
 }
