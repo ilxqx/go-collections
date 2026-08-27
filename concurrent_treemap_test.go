@@ -744,3 +744,28 @@ func TestConcurrentTreeMap_IsNotEmpty(t *testing.T) {
 	m.Put(1, "a")
 	require.True(t, m.IsNotEmpty(), "map with entry should be non-empty")
 }
+
+// Regression: narrow range queries used to snapshot by scanning; they now
+// delegate to the inner tree's pivoted seek. Guard the complexity with a
+// comparator call count — a full scan would need one call per entry.
+func TestConcurrentTreeMap_NarrowRangeSeeks(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	m := NewConcurrentTreeMap[int, int](func(a, b int) int { calls++; return cmp.Compare(a, b) })
+	const n = 4096
+	for i := range n {
+		m.Put(i, i)
+	}
+
+	calls = 0
+	got := 0
+	m.AscendFrom(n-3, func(int, int) bool { got++; return true })
+	require.Equal(t, 3, got, "AscendFrom should visit the last three entries")
+	require.Less(t, calls, 200, "AscendFrom must seek to the pivot, not scan all %d entries", n)
+
+	calls = 0
+	got = 0
+	m.RangeFrom(n-3, func(int, int) bool { got++; return true })
+	require.Equal(t, 3, got, "RangeFrom should visit the last three entries")
+	require.Less(t, calls, 200, "RangeFrom must seek to the pivot, not scan all %d entries", n)
+}

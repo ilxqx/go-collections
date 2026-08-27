@@ -700,3 +700,28 @@ func TestConcurrentTreeSet_RemoveAndGetReturnsStoredElement(t *testing.T) {
 	require.Equal(t, "stored", v, "RemoveAndGet must return the stored element, not the query")
 	require.True(t, s.IsEmpty(), "the set should be empty after the removal")
 }
+
+// Regression: narrow range queries used to snapshot by scanning; they now
+// delegate to the inner tree's pivoted seek. Guard the complexity with a
+// comparator call count — a full scan would need one call per element.
+func TestConcurrentTreeSet_NarrowRangeSeeks(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	s := NewConcurrentTreeSet[int](func(a, b int) int { calls++; return cmp.Compare(a, b) })
+	const n = 4096
+	for i := range n {
+		s.Add(i)
+	}
+
+	calls = 0
+	got := 0
+	s.AscendFrom(n-3, func(int) bool { got++; return true })
+	require.Equal(t, 3, got, "AscendFrom should visit the last three elements")
+	require.Less(t, calls, 200, "AscendFrom must seek to the pivot, not scan all %d elements", n)
+
+	calls = 0
+	got = 0
+	s.Range(n-3, n-1, func(int) bool { got++; return true })
+	require.Equal(t, 3, got, "Range should visit the last three elements")
+	require.Less(t, calls, 200, "Range must seek to the pivot, not scan all %d elements", n)
+}
