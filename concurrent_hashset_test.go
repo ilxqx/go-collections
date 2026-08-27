@@ -322,3 +322,30 @@ func TestConcurrentHashSet_GobInterfaceRoundTrip(t *testing.T) {
 	require.Equal(t, 2, dst.S.Size(), "the decoded set should hold both elements")
 	require.True(t, dst.S.Add("c"), "the decoded set should accept writes")
 }
+
+// Regression: decoding a payload holding a dynamically unhashable element
+// (any satisfies comparable since Go 1.20) used to clear the set, store a
+// prefix of the payload, then panic. It is now rejected up front with an
+// error and the set is left untouched.
+func TestConcurrentHashSet_DecodeRejectsUnhashableElements(t *testing.T) {
+	t.Parallel()
+	s := NewConcurrentHashSet[any]()
+	s.Add("old")
+
+	err := s.(json.Unmarshaler).UnmarshalJSON([]byte(`[1,[2]]`))
+	require.ErrorContains(t, err, "unhashable", "the JSON payload must be rejected, not panic")
+	require.True(t, s.Contains("old"), "a rejected payload must leave the set untouched")
+	require.Equal(t, 1, s.Size(), "no payload element may leak into the set")
+
+	gob.Register([]int{})
+	var buf bytes.Buffer
+	require.NoError(t, gob.NewEncoder(&buf).Encode([]any{1, []int{2}}), "the slice itself encodes fine")
+	err = s.(gob.GobDecoder).GobDecode(buf.Bytes())
+	require.ErrorContains(t, err, "unhashable", "the gob payload must be rejected, not panic")
+	require.True(t, s.Contains("old"), "a rejected gob payload must leave the set untouched")
+	require.Equal(t, 1, s.Size(), "no payload element may leak into the set")
+
+	require.NoError(t, s.(json.Unmarshaler).UnmarshalJSON([]byte(`[1,2]`)), "a hashable payload should decode")
+	require.True(t, s.Contains(float64(1)), "decoded elements should land")
+	require.Equal(t, 2, s.Size(), "the hashable payload should replace the old contents")
+}

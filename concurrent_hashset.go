@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"fmt"
 	"iter"
 
 	"github.com/puzpuzpuz/xsync/v3"
@@ -434,11 +435,15 @@ func (s *concurrentHashSet[T]) refill(elements []T) {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-// Deserializes from a JSON array.
+// Deserializes from a JSON array. A payload holding a dynamically unhashable
+// element is rejected with an error and leaves the set untouched.
 func (s *concurrentHashSet[T]) UnmarshalJSON(data []byte) error {
 	var slice []T
 	if err := json.Unmarshal(data, &slice); err != nil {
 		return err
+	}
+	if err := validateHashable(slice); err != nil {
+		return fmt.Errorf("unmarshal concurrent hashset: %w", err)
 	}
 	s.refill(slice)
 	return nil
@@ -456,12 +461,16 @@ func (s *concurrentHashSet[T]) GobEncode() ([]byte, error) {
 }
 
 // GobDecode implements gob.GobDecoder.
-// Deserializes from gob data.
+// Deserializes from gob data. A payload holding a dynamically unhashable
+// element is rejected with an error and leaves the set untouched.
 func (s *concurrentHashSet[T]) GobDecode(data []byte) error {
 	var slice []T
 	dec := gob.NewDecoder(bytes.NewReader(data))
 	if err := dec.Decode(&slice); err != nil {
 		return err
+	}
+	if err := validateHashable(slice); err != nil {
+		return fmt.Errorf("unmarshal concurrent hashset: %w", err)
 	}
 	s.refill(slice)
 	return nil

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"fmt"
 	"iter"
 	"maps"
 	"slices"
@@ -363,16 +364,21 @@ func (s *hashSet[T]) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-// Deserializes from a JSON array.
+// Deserializes from a JSON array. A payload holding a dynamically unhashable
+// element is rejected with an error and leaves the set untouched.
 func (s *hashSet[T]) UnmarshalJSON(data []byte) error {
 	var slice []T
 	if err := json.Unmarshal(data, &slice); err != nil {
 		return err
 	}
-	s.m = make(map[T]struct{}, len(slice))
-	for _, elem := range slice {
-		s.m[elem] = struct{}{}
+	if err := validateHashable(slice); err != nil {
+		return fmt.Errorf("unmarshal hashset: %w", err)
 	}
+	m := make(map[T]struct{}, len(slice))
+	for _, elem := range slice {
+		m[elem] = struct{}{}
+	}
+	s.m = m
 	return nil
 }
 
@@ -386,17 +392,22 @@ func (s *hashSet[T]) GobEncode() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// GobDecode implements gob.GobDecoder.
+// GobDecode implements gob.GobDecoder. A payload holding a dynamically
+// unhashable element is rejected with an error and leaves the set untouched.
 func (s *hashSet[T]) GobDecode(data []byte) error {
 	var slice []T
 	dec := gob.NewDecoder(bytes.NewReader(data))
 	if err := dec.Decode(&slice); err != nil {
 		return err
 	}
-	s.m = make(map[T]struct{}, len(slice))
-	for _, elem := range slice {
-		s.m[elem] = struct{}{}
+	if err := validateHashable(slice); err != nil {
+		return fmt.Errorf("unmarshal hashset: %w", err)
 	}
+	m := make(map[T]struct{}, len(slice))
+	for _, elem := range slice {
+		m[elem] = struct{}{}
+	}
+	s.m = m
 	return nil
 }
 

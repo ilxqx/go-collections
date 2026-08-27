@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 )
 
 // ==========================
@@ -21,6 +22,21 @@ type serializableEntry[K, V any] struct {
 // serializableMap wraps map entries for JSON serialization.
 type serializableMap[K, V any] struct {
 	Entries []serializableEntry[K, V] `json:"entries"`
+}
+
+// validateHashable returns an error naming the first element of elems that
+// cannot be used as a hash-map key. T may be an interface or contain one
+// (any satisfies comparable since Go 1.20), so a decoded payload can carry a
+// dynamically unhashable value — storing it would panic after the receiver
+// was already partially mutated, so decode paths reject the whole payload up
+// front. A nil interface value is a valid key.
+func validateHashable[T comparable](elems []T) error {
+	for i, e := range elems {
+		if rv := reflect.ValueOf(e); rv.IsValid() && !rv.Comparable() {
+			return fmt.Errorf("element %d has unhashable type %T", i, e)
+		}
+	}
+	return nil
 }
 
 // ==========================
