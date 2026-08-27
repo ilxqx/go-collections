@@ -433,10 +433,16 @@ func BenchmarkSyncList_ConcurrentReadWrite(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		i := 0
 		for pb.Next() {
-			if i%2 == 0 {
+			// Steady state: half reads, and paired Add/RemoveLast writes so
+			// the list stays near its initial 1000 elements instead of
+			// growing (and slowing) as the benchmark runs longer.
+			switch i % 4 {
+			case 0, 2:
 				_, _ = l.Get(i % 1000)
-			} else {
+			case 1:
 				l.Add(i)
+			default:
+				l.RemoveLast()
 			}
 			i++
 		}
