@@ -791,6 +791,68 @@ func TestConcurrentTreeSet_SetOpSnapshotIsCheap(t *testing.T) {
 	require.Less(t, calls, 100, "Filter must snapshot copy-on-write, not rebuild the tree")
 }
 
+// gateSet wraps a concurrent set and, on the first Contains call, starts a
+// writer on it and waits until that writer has either finished (the set
+// operation holds no lock at this point — the fixed behavior) or provably
+// queued on the set's lock (the old implementation reached this hook while
+// holding the read lock, which a probe reader then blocks behind). Only then
+// does it delegate, turning the old implementation's recursive read lock
+// into a guaranteed deadlock instead of a scheduling coincidence.
+type gateSet struct {
+	Set[int]
+	once       sync.Once
+	writerDone chan struct{}
+}
+
+func (g *gateSet) Contains(e int) bool {
+	g.once.Do(func() {
+		go func() {
+			g.Add(999)
+			close(g.writerDone)
+		}()
+		for {
+			select {
+			case <-g.writerDone:
+				return
+			default:
+			}
+			probed := make(chan struct{})
+			go func() { g.Size(); close(probed) }()
+			select {
+			case <-probed:
+				runtime.Gosched()
+			case <-time.After(100 * time.Millisecond):
+				return // the writer is queued behind the lock we would need
+			}
+		}
+	})
+	return g.Set.Contains(e)
+}
+
+// Regression: the set operations used to call other.Contains while holding
+// the receiver's read lock. The stress test above relies on a scheduling
+// coincidence and can pass against the broken implementation; this test pins
+// the interleaving — a writer is provably queued on the lock before Contains
+// touches the set again — which made the old implementation deadlock every
+// time.
+func TestConcurrentTreeSet_SetOpWithQueuedWriter(t *testing.T) {
+	t.Parallel()
+	s := NewConcurrentTreeSetOrdered[int]()
+	s.AddAll(1, 2, 3)
+	gate := &gateSet{Set: s, writerDone: make(chan struct{})}
+
+	result := make(chan Set[int], 1)
+	go func() { result <- s.Intersection(gate) }()
+	select {
+	case got := <-result:
+		require.True(t, got.Contains(1), "the intersection must contain the shared elements")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Intersection deadlocked: other.Contains ran under the receiver's lock with a writer queued")
+	}
+	<-gate.writerDone // the writer can only finish once the operation released the lock
+	require.True(t, s.Contains(999), "the queued writer's Add must land")
+}
+
 // Regression: Filter used to run the predicate under the read lock with no
 // deferred unlock, so a predicate touching the same set self-deadlocked and
 // a recovered predicate panic leaked the lock, blocking every later writer.
