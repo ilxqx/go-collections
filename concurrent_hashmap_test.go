@@ -566,3 +566,38 @@ func TestConcurrentHashMap_AbsentKeyHelpersInsertNothing(t *testing.T) {
 	require.False(t, m.CompareAndDelete("f", 1, eq), "CompareAndDelete on an absent key must report false")
 	require.Equal(t, 0, m.Size(), "no helper may create the key it failed to find")
 }
+
+// Regression: a panic in a compute-family callback used to escape while the
+// backing map's internal bucket lock was still held, permanently blocking
+// every later operation on that bucket.
+func TestConcurrentHashMap_CallbackPanicLeavesMapUsable(t *testing.T) {
+	t.Parallel()
+	m := NewConcurrentHashMap[int, int]()
+	m.Put(1, 10)
+
+	require.PanicsWithValue(t, "boom", func() {
+		m.GetOrCompute(2, func() int { panic("boom") })
+	}, "GetOrCompute must propagate the callback panic")
+	require.False(t, m.ContainsKey(2), "a panicking compute must store nothing")
+
+	require.PanicsWithValue(t, "boom", func() {
+		m.Compute(1, func(int, int, bool) (int, bool) { panic("boom") })
+	}, "Compute must propagate the callback panic")
+	require.PanicsWithValue(t, "boom", func() {
+		m.ComputeIfAbsent(3, func(int) int { panic("boom") })
+	}, "ComputeIfAbsent must propagate the callback panic")
+	require.PanicsWithValue(t, "boom", func() {
+		m.ComputeIfPresent(1, func(int, int) (int, bool) { panic("boom") })
+	}, "ComputeIfPresent must propagate the callback panic")
+	require.PanicsWithValue(t, "boom", func() {
+		m.Merge(1, 5, func(int, int) (int, bool) { panic("boom") })
+	}, "Merge must propagate the callback panic")
+
+	v, ok := m.Get(1)
+	require.True(t, ok, "existing entries must survive callback panics")
+	require.Equal(t, 10, v, "a panicking callback must leave values unchanged")
+	m.Put(4, 40)
+	v, ok = m.Get(4)
+	require.True(t, ok, "the map must stay usable after callback panics")
+	require.Equal(t, 40, v, "writes after a callback panic must work")
+}

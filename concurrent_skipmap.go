@@ -197,9 +197,16 @@ func (c *concurrentSkipMap[K, V]) Compute(key K, remapping func(key K, oldValue 
 	return newVal, true
 }
 
-// ComputeIfAbsent computes and stores value if key is absent (atomic compute).
+// ComputeIfAbsent computes and stores value if key is absent.
+// The mapping function runs without any lock held, so it may call back into
+// the map and a panic in it stores nothing and leaves the map usable. When
+// two writers race on the same absent key, both may invoke mapping and the
+// loser's result is discarded — the store itself is atomic.
 func (c *concurrentSkipMap[K, V]) ComputeIfAbsent(key K, mapping func(key K) V) V {
-	v, _ := c.m.LoadOrStoreLazy(key, func() V { return mapping(key) })
+	if v, ok := c.m.Load(key); ok {
+		return v
+	}
+	v, _ := c.m.LoadOrStore(key, mapping(key))
 	return v
 }
 
@@ -348,10 +355,17 @@ func (c *concurrentSkipMap[K, V]) Equals(other Map[K, V], valueEq Equaler[V]) bo
 	return snap.Equals(other, valueEq)
 }
 
-// GetOrCompute atomically returns existing value or computes and stores a new one.
+// GetOrCompute returns the existing value or computes and stores a new one.
 // Returns (value, true) if computed (absent before).
+// The compute function runs without any lock held, so it may call back into
+// the map and a panic in it stores nothing and leaves the map usable. When
+// two writers race on the same absent key, both may invoke compute and the
+// loser's result is discarded — the store itself is atomic.
 func (c *concurrentSkipMap[K, V]) GetOrCompute(key K, compute func() V) (V, bool) {
-	v, loaded := c.m.LoadOrStoreLazy(key, compute)
+	if v, ok := c.m.Load(key); ok {
+		return v, false
+	}
+	v, loaded := c.m.LoadOrStore(key, compute())
 	return v, !loaded
 }
 

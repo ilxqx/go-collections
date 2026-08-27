@@ -836,3 +836,31 @@ func TestConcurrentSkipMap_ClearConcurrentWithPut(t *testing.T) {
 	m.Clear()
 	require.Equal(t, 0, m.Size(), "quiescent Clear should leave the map empty")
 }
+
+// Regression: GetOrCompute ran the callback inside the skip list's internal
+// node locks, so a callback writing to the map deadlocked and a callback
+// panic leaked the locks permanently.
+func TestConcurrentSkipMap_GetOrComputeCallbackRunsUnlocked(t *testing.T) {
+	t.Parallel()
+	m := NewConcurrentSkipMap[int, int]()
+
+	v, computed := m.GetOrCompute(1, func() int {
+		m.Put(2, 2) // must not deadlock: the callback runs without locks
+		return 1
+	})
+	require.True(t, computed, "the absent key must be computed")
+	require.Equal(t, 1, v, "the computed value must be returned")
+	require.True(t, m.ContainsKey(2), "the callback's own write must land")
+
+	require.PanicsWithValue(t, "boom", func() {
+		m.GetOrCompute(3, func() int { panic("boom") })
+	}, "GetOrCompute must propagate the callback panic")
+	require.False(t, m.ContainsKey(3), "a panicking compute must store nothing")
+	m.Put(4, 4)
+	require.True(t, m.ContainsKey(4), "the map must stay usable after a callback panic")
+
+	require.PanicsWithValue(t, "boom", func() {
+		m.ComputeIfAbsent(5, func(int) int { panic("boom") })
+	}, "ComputeIfAbsent must propagate the callback panic")
+	require.False(t, m.ContainsKey(5), "a panicking mapping must store nothing")
+}

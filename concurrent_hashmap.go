@@ -186,12 +186,25 @@ func (m *concurrentHashMap[K, V]) RemoveFunc(predicate func(key K, value V) bool
 }
 
 // Compute recomputes mapping for key. If keep==false, the key is removed.
+// The remapping function runs while an internal bucket lock is held: it must
+// not call back into the same map, and should be short. A panic in remapping
+// is propagated after the lock is released and leaves the map unchanged.
 func (m *concurrentHashMap[K, V]) Compute(key K, remapping func(key K, oldValue V, exists bool) (newValue V, keep bool)) (V, bool) {
 	var (
-		result V
-		ok     bool
+		result   V
+		ok       bool
+		panicked bool
+		panicVal any
 	)
-	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
+	m.m.Compute(key, func(prev V, loaded bool) (newValue V, del bool) {
+		defer func() {
+			if p := recover(); p != nil {
+				panicked, panicVal = true, p
+				// Abort without modifying: write the old value back when the
+				// key exists, delete the (absent) key otherwise — both no-ops.
+				newValue, del = prev, !loaded
+			}
+		}()
 		newVal, keep := remapping(key, prev, loaded)
 		if !keep {
 			ok = false
@@ -203,28 +216,68 @@ func (m *concurrentHashMap[K, V]) Compute(key K, remapping func(key K, oldValue 
 		result = newVal
 		return newVal, false
 	})
+	if panicked {
+		panic(panicVal)
+	}
 	return result, ok
 }
 
 // ComputeIfAbsent computes and stores value if key is absent.
+// The mapping function runs while an internal bucket lock is held: it must
+// not call back into the same map, and should be short. A panic in mapping
+// is propagated after the lock is released and stores nothing.
 func (m *concurrentHashMap[K, V]) ComputeIfAbsent(key K, mapping func(key K) V) V {
-	v, _ := m.m.LoadOrCompute(key, func() V { return mapping(key) })
+	v, _ := m.loadOrTryCompute(key, func() V { return mapping(key) })
 	return v
 }
 
+// loadOrTryCompute wraps xsync's LoadOrTryCompute so a panicking compute
+// cancels the store, is re-raised only after the internal bucket lock has
+// been released, and can never leave that lock held.
+func (m *concurrentHashMap[K, V]) loadOrTryCompute(key K, compute func() V) (V, bool) {
+	var (
+		panicked bool
+		panicVal any
+	)
+	v, loaded := m.m.LoadOrTryCompute(key, func() (newValue V, cancel bool) {
+		defer func() {
+			if p := recover(); p != nil {
+				panicked, panicVal = true, p
+				cancel = true
+			}
+		}()
+		return compute(), false
+	})
+	if panicked {
+		panic(panicVal)
+	}
+	return v, loaded
+}
+
 // ComputeIfPresent recomputes value if key is present. If keep==false, removes key.
+// The remapping function runs while an internal bucket lock is held: it must
+// not call back into the same map, and should be short. A panic in remapping
+// is propagated after the lock is released and leaves the map unchanged.
 func (m *concurrentHashMap[K, V]) ComputeIfPresent(key K, remapping func(key K, oldValue V) (newValue V, keep bool)) (V, bool) {
 	var (
-		out V
-		ok  bool
+		out      V
+		ok       bool
+		panicked bool
+		panicVal any
 	)
-	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
+	m.m.Compute(key, func(prev V, loaded bool) (newValue V, del bool) {
 		if !loaded {
 			ok = false
 			// Deleting an absent key is a no-op; returning del=false would
 			// insert prev (a zero value) for the key.
 			return prev, true
 		}
+		defer func() {
+			if p := recover(); p != nil {
+				panicked, panicVal = true, p
+				newValue, del = prev, false // write the old value back: no-op
+			}
+		}()
 		newVal, keep := remapping(key, prev)
 		if !keep {
 			ok = false
@@ -236,32 +289,49 @@ func (m *concurrentHashMap[K, V]) ComputeIfPresent(key K, remapping func(key K, 
 		out = newVal
 		return newVal, false
 	})
+	if panicked {
+		panic(panicVal)
+	}
 	return out, ok
 }
 
 // Merge merges value with existing. If keep==false, removes key.
+// The remapping function runs while an internal bucket lock is held: it must
+// not call back into the same map, and should be short. A panic in remapping
+// is propagated after the lock is released and leaves the map unchanged.
 func (m *concurrentHashMap[K, V]) Merge(key K, value V, remapping func(oldValue, newValue V) (mergedValue V, keep bool)) (V, bool) {
 	var (
-		out V
-		ok  bool
+		out      V
+		ok       bool
+		panicked bool
+		panicVal any
 	)
-	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
-		if loaded {
-			merged, keep := remapping(prev, value)
-			if !keep {
-				ok = false
-				var zero V
-				out = zero
-				return zero, true // delete
-			}
+	m.m.Compute(key, func(prev V, loaded bool) (newValue V, del bool) {
+		if !loaded {
 			ok = true
-			out = merged
-			return out, false
+			out = value
+			return value, false
+		}
+		defer func() {
+			if p := recover(); p != nil {
+				panicked, panicVal = true, p
+				newValue, del = prev, false // write the old value back: no-op
+			}
+		}()
+		merged, keep := remapping(prev, value)
+		if !keep {
+			ok = false
+			var zero V
+			out = zero
+			return zero, true // delete
 		}
 		ok = true
-		out = value
-		return value, false
+		out = merged
+		return out, false
 	})
+	if panicked {
+		panic(panicVal)
+	}
 	return out, ok
 }
 
@@ -416,8 +486,11 @@ func (m *concurrentHashMap[K, V]) Equals(other Map[K, V], valueEq Equaler[V]) bo
 
 // GetOrCompute atomically returns existing value or computes and stores a new one.
 // Returns (value, true) if computed (i.e., absent before).
+// The compute function runs while an internal bucket lock is held: it must
+// not call back into the same map, and should be short. A panic in compute
+// is propagated after the lock is released and stores nothing.
 func (m *concurrentHashMap[K, V]) GetOrCompute(key K, compute func() V) (V, bool) {
-	v, loaded := m.m.LoadOrCompute(key, compute)
+	v, loaded := m.loadOrTryCompute(key, compute)
 	return v, !loaded
 }
 
