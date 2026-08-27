@@ -521,7 +521,7 @@ higher, _ := m.HigherKey(2)    // 3
 
 Thread-safe hash map backed by `xsync.MapOf`.
 
-**Callback Note:** Every user callback — the compute family (`GetOrCompute`, `Compute`, `ComputeIfAbsent`, `ComputeIfPresent`, `Merge`) as well as the `Equaler`/function of `RemoveIf`, `ReplaceIf`, `ReplaceAll`, `CompareAndSwap` and `CompareAndDelete` — runs while an internal bucket lock is held: it must not call back into the same map, and should be short. A panic inside any of these callbacks is propagated after the lock is released; the entry whose callback panicked is left unchanged and the map stays usable. `ReplaceAll` commits entry by entry: it stops at the panicking entry, and entries it already replaced stay replaced.
+**Callback Note:** The callbacks used by the compute family (`GetOrCompute`, `Compute`, `ComputeIfAbsent`, `ComputeIfPresent`, `Merge`) and the `Equaler`/function of `RemoveIf`, `ReplaceIf`, `ReplaceAll`, `CompareAndSwap` and `CompareAndDelete` run while an internal bucket lock is held: they must not call back into the same map, and should be short. A panic inside any of these callbacks is propagated after the lock is released; the entry whose callback panicked is left unchanged and the map stays usable. `ReplaceAll` commits entry by entry: it stops at the panicking entry, and entries it already replaced stay replaced. Iteration-based callbacks (`ForEach`, `Filter`, `RemoveFunc`, `ContainsValue`, `Equals`, `Seq`/`SeqKeys`/`SeqValues`) run without that lock and may safely call back into the map.
 
 **Constructors:**
 
