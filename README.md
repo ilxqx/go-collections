@@ -726,7 +726,9 @@ func NewCOWListFrom[T any](elements ...T) List[T]
 
 #### SyncList
 
-A concurrent list backed by a slice guarded by a single RWMutex. Every method call is atomic; iteration methods copy a snapshot first, so callbacks never run under the lock. (Replaces the former SegmentedList, whose segmented locks delivered no real write concurrency.)
+A concurrent list backed by a slice guarded by a single RWMutex. Every method call is atomic; iteration methods (`Seq`/`ForEach`/`Reversed`/`Filter`) copy a snapshot first, so their callbacks never run under the lock. (Replaces the former SegmentedList, whose segmented locks delivered no real write concurrency.)
+
+**Callback Note:** Every other callback — the `Equaler` of `Remove`/`IndexOf`/`Contains`, the predicates of `Find`/`RemoveFunc`/`RetainFunc`/`Every`, the `Comparator` of `Sort` — runs while the lock is held (that is what makes those calls atomic) and must not call back into the same list, or it will deadlock.
 
 **Constructors:**
 

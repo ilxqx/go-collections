@@ -101,13 +101,16 @@ type Set[T any] interface {
 	IsDisjoint(other Set[T]) bool
 	// Equals reports whether s and other contain exactly the same elements.
 	//
-	// Equals and the other cross-set predicates and operations test the
-	// receiver's elements with other.Contains, i.e. other's equality (a
-	// comparable type's ==, a TreeSet's comparator) decides membership.
-	// The results are deterministic, but when the two sets disagree on
-	// which elements are equal — say a case-insensitive TreeSet and a
-	// HashSet — they can be asymmetric (a.Equals(b) != b.Equals(a)); only
-	// combine sets that share an equivalence relation.
+	// Cross-set operations are deterministic but mix the two sets'
+	// equalities: Intersection, Difference, IsSubsetOf, IsDisjoint and
+	// Equals test the receiver's elements with other.Contains;
+	// IsSupersetOf runs that test with the roles swapped;
+	// SymmetricDifference tests each side against the other; Union
+	// deduplicates with the result set's own equality. When the two sets
+	// disagree on which elements are equal — say a case-insensitive
+	// TreeSet and a HashSet — results can be asymmetric
+	// (a.Equals(b) != b.Equals(a)); only combine sets that share an
+	// equivalence relation.
 	Equals(other Set[T]) bool
 
 	// --- Transformations ---
@@ -700,8 +703,10 @@ type ConcurrentSortedSet[T any] interface {
 type ConcurrentMap[K, V any] interface {
 	Map[K, V]
 
-	// GetOrCompute returns the existing value or computes and stores a new one.
-	// Returns (value, true) if computed (key was absent).
+	// GetOrCompute returns the value for key, computing and storing one if
+	// absent. The bool reports whether this call's computed value was
+	// stored; false means an already-present value was returned (compute
+	// may still have run and lost a race, its result then discarded).
 	// The store is atomic in every implementation; where compute runs differs:
 	//   - ConcurrentHashMap and ConcurrentTreeMap run it under an internal
 	//     lock — it must not call back into the same map. A panic in it is

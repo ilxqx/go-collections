@@ -355,12 +355,13 @@ func (c *concurrentSkipMap[K, V]) Equals(other Map[K, V], valueEq Equaler[V]) bo
 	return snap.Equals(other, valueEq)
 }
 
-// GetOrCompute returns the existing value or computes and stores a new one.
-// Returns (value, true) if computed (absent before).
+// GetOrCompute returns the value for key, computing and storing one if absent.
+// The bool reports whether this call's computed value was stored: false means
+// an already-present value was returned — compute may still have run and lost
+// the race (or itself stored the key), its result then being discarded.
 // The compute function runs without any lock held, so it may call back into
-// the map and a panic in it stores nothing and leaves the map usable. When
-// two writers race on the same absent key, both may invoke compute and the
-// loser's result is discarded — the store itself is atomic.
+// the map and a panic in it stores nothing and leaves the map usable; the
+// store itself is atomic.
 func (c *concurrentSkipMap[K, V]) GetOrCompute(key K, compute func() V) (V, bool) {
 	if v, ok := c.m.Load(key); ok {
 		return v, false

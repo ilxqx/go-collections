@@ -29,11 +29,19 @@ type syncList[T any] struct {
 }
 
 // NewSyncList creates a new empty mutex-guarded list.
+//
+// Every method call is atomic under an internal lock. Iteration methods
+// (Seq/ForEach/Reversed/Filter) run user callbacks on a snapshot, outside
+// the lock; every other callback (the Equaler of Remove/IndexOf/Contains,
+// the predicates of Find/RemoveFunc/RetainFunc/Every, the Comparator of
+// Sort) runs while the lock is held and must not call back into the same
+// list, or it will deadlock.
 func NewSyncList[T any]() List[T] {
 	return &syncList[T]{}
 }
 
 // NewSyncListFrom creates a mutex-guarded list from elements.
+// See NewSyncList for the locking contract.
 func NewSyncListFrom[T any](elements ...T) List[T] {
 	l := &syncList[T]{data: make([]T, len(elements))}
 	copy(l.data, elements)
