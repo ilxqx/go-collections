@@ -1,8 +1,11 @@
 package collections
 
 import (
+	"encoding/gob"
+	"encoding/json"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"testing/synctest"
 
@@ -615,4 +618,31 @@ func TestConcurrentHashMap_CallbackPanicLeavesMapUsable(t *testing.T) {
 	v, ok = m.Get(4)
 	require.True(t, ok, "the map must stay usable after callback panics")
 	require.Equal(t, 40, v, "writes after a callback panic must work")
+}
+
+// Regression: UnmarshalJSON and GobDecode replaced the backing xsync map
+// pointer without synchronization, racing with every concurrent reader.
+// Run with -race to exercise the guarantee.
+func TestConcurrentHashMap_DecodeConcurrentWithReaders(t *testing.T) {
+	t.Parallel()
+	m := NewConcurrentHashMap[string, int]()
+	m.Put("a", 1)
+	jsonData := []byte(`{"b":2}`)
+	gobData, err := m.(gob.GobEncoder).GobEncode()
+	require.NoError(t, err, "encoding the map should succeed")
+
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for range 2000 {
+			m.Get("a")
+			m.ContainsKey("b")
+		}
+	})
+	wg.Go(func() {
+		for range 1000 {
+			require.NoError(t, m.(json.Unmarshaler).UnmarshalJSON(jsonData))
+			require.NoError(t, m.(gob.GobDecoder).GobDecode(gobData))
+		}
+	})
+	wg.Wait()
 }

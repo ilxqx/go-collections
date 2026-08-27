@@ -1,8 +1,11 @@
 package collections
 
 import (
+	"encoding/gob"
+	"encoding/json"
 	"runtime"
 	"slices"
+	"sync"
 	"testing"
 	"testing/synctest"
 
@@ -272,4 +275,31 @@ func TestConcurrentHashSet_IsNotEmpty(t *testing.T) {
 	assert.False(t, s.IsNotEmpty(), "new set should not be non-empty")
 	s.Add(1)
 	assert.True(t, s.IsNotEmpty(), "set with element should be non-empty")
+}
+
+// Regression: UnmarshalJSON and GobDecode replaced the backing xsync map
+// pointer without synchronization, racing with every concurrent reader.
+// Run with -race to exercise the guarantee.
+func TestConcurrentHashSet_DecodeConcurrentWithReaders(t *testing.T) {
+	t.Parallel()
+	s := NewConcurrentHashSet[int]()
+	s.Add(1)
+	jsonData := []byte(`[2,3]`)
+	gobData, err := s.(gob.GobEncoder).GobEncode()
+	require.NoError(t, err, "encoding the set should succeed")
+
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for range 2000 {
+			s.Contains(1)
+			s.Size()
+		}
+	})
+	wg.Go(func() {
+		for range 1000 {
+			require.NoError(t, s.(json.Unmarshaler).UnmarshalJSON(jsonData))
+			require.NoError(t, s.(gob.GobDecoder).GobDecode(gobData))
+		}
+	})
+	wg.Wait()
 }

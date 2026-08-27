@@ -424,7 +424,9 @@ func (s *concurrentHashSet[T]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &slice); err != nil {
 		return err
 	}
-	s.m = xsync.NewMapOf[T, struct{}]()
+	// Refill the existing backing map: replacing the s.m pointer would race
+	// with concurrent readers of the receiver.
+	s.m.Clear()
 	for _, elem := range slice {
 		s.m.Store(elem, struct{}{})
 	}
@@ -450,7 +452,9 @@ func (s *concurrentHashSet[T]) GobDecode(data []byte) error {
 	if err := dec.Decode(&slice); err != nil {
 		return err
 	}
-	s.m = xsync.NewMapOf[T, struct{}]()
+	// Refill the existing backing map: replacing the s.m pointer would race
+	// with concurrent readers of the receiver.
+	s.m.Clear()
 	for _, elem := range slice {
 		s.m.Store(elem, struct{}{})
 	}

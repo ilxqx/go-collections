@@ -612,7 +612,9 @@ func (m *concurrentHashMap[K, V]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &snapshot); err != nil {
 		return err
 	}
-	m.m = xsync.NewMapOf[K, V]()
+	// Refill the existing backing map: replacing the m.m pointer would race
+	// with concurrent readers of the receiver.
+	m.m.Clear()
 	for key, value := range snapshot {
 		m.m.Store(key, value)
 	}
@@ -644,7 +646,9 @@ func (m *concurrentHashMap[K, V]) GobDecode(data []byte) error {
 	if err := dec.Decode(&snapshot); err != nil {
 		return err
 	}
-	m.m = xsync.NewMapOf[K, V]()
+	// Refill the existing backing map: replacing the m.m pointer would race
+	// with concurrent readers of the receiver.
+	m.m.Clear()
 	for key, value := range snapshot {
 		m.m.Store(key, value)
 	}
