@@ -245,17 +245,17 @@ func (c *concurrentTreeSet[T]) ContainsAny(elements ...T) bool {
 	return c.tree.ContainsAny(elements...)
 }
 
-// snapshot copies the elements into a plain treeSet under the read lock.
-// Set operations consult `other` only after the lock is released: calling
-// other.Contains under the lock deadlocks when other is this very set
-// (recursive RLock blocks once a writer is queued) and can invert lock
-// order against another mutex-guarded set.
+// snapshot clones the tree under the read lock — a copy-on-write B-tree
+// copy, so it costs O(1) and no comparator calls; the B-tree's own lock
+// serializes the copy against concurrent copies and readers. Set operations
+// and Filter consult `other` and run predicates only after the lock is
+// released: calling other.Contains under the lock deadlocks when other is
+// this very set (recursive RLock blocks once a writer is queued) and can
+// invert lock order against another mutex-guarded set.
 func (c *concurrentTreeSet[T]) snapshot() *treeSet[T] {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	snap := newTreeSet(c.tree.cmp)
-	c.tree.bt.Scan(func(item T) bool { snap.bt.Set(item); return true })
-	return snap
+	return &treeSet[T]{bt: c.tree.bt.Copy(), cmp: c.tree.cmp}
 }
 
 // Union returns a new set containing elements from both sets (sorted, snapshot-based).

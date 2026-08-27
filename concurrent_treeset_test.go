@@ -765,6 +765,32 @@ func TestConcurrentTreeSet_SelfSetOpsWithWriter(t *testing.T) {
 	require.True(t, s.Difference(s).IsEmpty(), "self-difference must be empty")
 }
 
+// Regression: snapshot used to rebuild the B-tree element by element,
+// costing O(n log n) comparator calls per set operation. It now clones the
+// tree copy-on-write, so a set operation against a hash set needs almost no
+// comparator calls at all.
+func TestConcurrentTreeSet_SetOpSnapshotIsCheap(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	s := NewConcurrentTreeSet[int](func(a, b int) int { calls++; return cmp.Compare(a, b) })
+	const n = 10000
+	for i := range n {
+		s.Add(i)
+	}
+	other := NewHashSet[int]()
+	for i := range n {
+		other.Add(i)
+	}
+
+	calls = 0
+	require.True(t, s.IsSubsetOf(other), "the sets hold the same elements")
+	require.Less(t, calls, 100, "IsSubsetOf must snapshot copy-on-write, not rebuild the tree")
+
+	calls = 0
+	require.True(t, s.Filter(func(int) bool { return false }).IsEmpty(), "the predicate rejects everything")
+	require.Less(t, calls, 100, "Filter must snapshot copy-on-write, not rebuild the tree")
+}
+
 // Regression: Filter used to run the predicate under the read lock with no
 // deferred unlock, so a predicate touching the same set self-deadlocked and
 // a recovered predicate panic leaked the lock, blocking every later writer.
