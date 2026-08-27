@@ -485,6 +485,7 @@ func (c *concurrentSkipSet[T]) Higher(x T) (T, bool) {
 }
 
 // Range iterates elements in [from, to] ascending.
+// O(n) in the elements below from: the skip list's public API offers no pivot seek, so this scans from the smallest key.
 func (c *concurrentSkipSet[T]) Range(from, to T, action func(element T) bool) {
 	if from > to {
 		return
@@ -501,6 +502,7 @@ func (c *concurrentSkipSet[T]) Range(from, to T, action func(element T) bool) {
 }
 
 // RangeSeq returns a sequence for elements in [from, to] ascending.
+// O(n) in the elements below from: the skip list's public API offers no pivot seek, so this scans from the smallest key.
 func (c *concurrentSkipSet[T]) RangeSeq(from, to T) iter.Seq[T] {
 	return func(yield func(T) bool) {
 		if from > to {
@@ -534,6 +536,7 @@ func (c *concurrentSkipSet[T]) Descend(action func(element T) bool) {
 }
 
 // AscendFrom iterates elements >= pivot in ascending order.
+// O(n) regardless of the result size: the skip list's public API offers no pivot seek, so this scans from the smallest key.
 func (c *concurrentSkipSet[T]) AscendFrom(pivot T, action func(element T) bool) {
 	c.s.Range(func(v T) bool {
 		if v >= pivot {
@@ -568,6 +571,7 @@ func (c *concurrentSkipSet[T]) Reversed() iter.Seq[T] {
 }
 
 // SubSet returns a new set containing elements in [from, to] (snapshot).
+// O(n) in the elements below from: the skip list's public API offers no pivot seek, so this scans from the smallest key.
 func (c *concurrentSkipSet[T]) SubSet(from, to T) SortedSet[T] {
 	out := NewTreeSetOrdered[T]()
 	if from > to {
@@ -591,6 +595,7 @@ func (c *concurrentSkipSet[T]) HeadSet(to T, inclusive bool) SortedSet[T] {
 }
 
 // TailSet returns elements > from (or >= from if inclusive) (snapshot).
+// O(n) regardless of the result size: the skip list's public API offers no pivot seek, so this scans from the smallest key.
 func (c *concurrentSkipSet[T]) TailSet(from T, inclusive bool) SortedSet[T] {
 	out := NewTreeSetOrdered[T]()
 	c.s.Range(func(v T) bool {

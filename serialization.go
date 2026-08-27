@@ -26,6 +26,14 @@ type serializableMap[K, V any] struct {
 // ==========================
 // TreeSet/TreeMap Deserialization Helpers
 // ==========================
+//
+// Comparator-carrying collections (TreeSet, TreeMap, PriorityQueue and their
+// concurrent wrappers) can only be gob-decoded into a receiver that already
+// has its comparator: either construct one and Decode into it, or use the
+// Unmarshal*Gob helpers below. This does not extend to nesting — a field of
+// such a type inside another gob-encoded struct is decoded into a zero-value
+// receiver with no comparator and fails with a "no comparator" error. Decode
+// nested collections separately from raw bytes instead.
 
 // UnmarshalTreeSetJSON deserializes a TreeSet from JSON.
 // Requires a comparator to be provided.

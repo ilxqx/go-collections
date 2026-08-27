@@ -101,11 +101,13 @@ type Set[T any] interface {
 	IsDisjoint(other Set[T]) bool
 	// Equals reports whether s and other contain exactly the same elements.
 	//
-	// Equals and the other cross-set predicates test membership with each
-	// set's own equality (a comparable type's ==, a TreeSet's comparator).
-	// When the two sets disagree on which elements are equal — say a
-	// case-insensitive TreeSet and a HashSet — the result can be asymmetric;
-	// only compare sets that share an equivalence relation.
+	// Equals and the other cross-set predicates and operations test the
+	// receiver's elements with other.Contains, i.e. other's equality (a
+	// comparable type's ==, a TreeSet's comparator) decides membership.
+	// The results are deterministic, but when the two sets disagree on
+	// which elements are equal — say a case-insensitive TreeSet and a
+	// HashSet — they can be asymmetric (a.Equals(b) != b.Equals(a)); only
+	// combine sets that share an equivalence relation.
 	Equals(other Set[T]) bool
 
 	// --- Transformations ---
@@ -471,6 +473,10 @@ type Map[K, V any] interface {
 	RemoveFunc(predicate func(key K, value V) bool) int
 
 	// --- Compute Operations ---
+	// In concurrent implementations the callbacks below may run while an
+	// internal lock is held; each implementation documents whether a
+	// callback may call back into the same map.
+	//
 	// Compute recomputes mapping for key.
 	// If keep==false, the key is removed.
 	Compute(key K, remapping func(key K, oldValue V, exists bool) (newValue V, keep bool)) (V, bool)
@@ -515,6 +521,12 @@ type Map[K, V any] interface {
 
 	// --- Comparison ---
 	// Equals reports whether both maps contain the same entries.
+	//
+	// Key membership is tested with each map's own key equality (a
+	// comparable type's ==, a TreeMap's comparator). When the two maps
+	// disagree on which keys are equal, the result can be asymmetric
+	// (a.Equals(b) != b.Equals(a)); only compare maps that share a key
+	// equivalence relation.
 	Equals(other Map[K, V], valueEq Equaler[V]) bool
 }
 
@@ -615,7 +627,9 @@ type SortedMap[K, V any] interface {
 // 1. ATOMIC (✓): Guaranteed atomic in all implementations.
 //    - Single-key reads: Get, Contains, ContainsKey
 //    - Single-key writes: Add, Remove
-//    - Atomic compound operations: AddIfAbsent, RemoveAndGet, PutIfAbsent, GetOrCompute
+//    - Atomic compound operations: AddIfAbsent, RemoveAndGet, PutIfAbsent,
+//      GetOrCompute (its store is atomic everywhere; see GetOrCompute for
+//      where the compute callback runs and the reentrancy rule)
 //
 // 2. BEST-EFFORT (~): Atomic in the mutex- and hash-based implementations;
 //    may race in the lock-free skip-list implementations.
@@ -686,9 +700,15 @@ type ConcurrentSortedSet[T any] interface {
 type ConcurrentMap[K, V any] interface {
 	Map[K, V]
 
-	// GetOrCompute atomically returns existing value or computes and stores a new one.
-	// ATOMIC: This is a single atomic operation.
+	// GetOrCompute returns the existing value or computes and stores a new one.
 	// Returns (value, true) if computed (key was absent).
+	// The store is atomic in every implementation; where compute runs differs:
+	//   - ConcurrentHashMap and ConcurrentTreeMap run it under an internal
+	//     lock — it must not call back into the same map. A panic in it is
+	//     propagated with the map left unchanged and usable.
+	//   - ConcurrentSkipMap runs it without locks — it may call back into
+	//     the map, and when two writers race on the same absent key both
+	//     may compute, with the loser's result discarded.
 	GetOrCompute(key K, compute func() V) (V, bool)
 
 	// RemoveAndGet atomically removes and returns the value for key.

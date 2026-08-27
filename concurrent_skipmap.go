@@ -568,6 +568,7 @@ func (c *concurrentSkipMap[K, V]) HigherEntry(k K) (Entry[K, V], bool) {
 }
 
 // Range iterates entries with keys in [from, to] ascending.
+// O(n) in the keys below from: the skip list's public API offers no pivot seek, so this scans from the smallest key.
 func (c *concurrentSkipMap[K, V]) Range(from, to K, action func(key K, value V) bool) {
 	if from > to {
 		return
@@ -584,6 +585,7 @@ func (c *concurrentSkipMap[K, V]) Range(from, to K, action func(key K, value V) 
 }
 
 // RangeSeq returns a sequence for entries with keys in [from, to] ascending.
+// O(n) in the keys below from: the skip list's public API offers no pivot seek, so this scans from the smallest key.
 func (c *concurrentSkipMap[K, V]) RangeSeq(from, to K) iter.Seq2[K, V] {
 	return func(yield func(K, V) bool) {
 		if from > to {
@@ -602,6 +604,7 @@ func (c *concurrentSkipMap[K, V]) RangeSeq(from, to K) iter.Seq2[K, V] {
 }
 
 // RangeFrom iterates entries with keys >= from.
+// O(n) regardless of the result size: the skip list's public API offers no pivot seek, so this scans from the smallest key.
 func (c *concurrentSkipMap[K, V]) RangeFrom(from K, action func(key K, value V) bool) {
 	c.m.Range(func(k K, v V) bool {
 		if k >= from {
@@ -637,6 +640,7 @@ func (c *concurrentSkipMap[K, V]) Descend(action func(key K, value V) bool) {
 }
 
 // AscendFrom iterates entries with keys >= pivot ascending.
+// O(n) regardless of the result size: the skip list's public API offers no pivot seek, so this scans from the smallest key.
 func (c *concurrentSkipMap[K, V]) AscendFrom(pivot K, action func(key K, value V) bool) {
 	c.m.Range(func(k K, v V) bool {
 		if k >= pivot {
@@ -671,6 +675,7 @@ func (c *concurrentSkipMap[K, V]) Reversed() iter.Seq2[K, V] {
 }
 
 // SubMap returns entries with keys in [from, to] (snapshot).
+// O(n) in the keys below from: the skip list's public API offers no pivot seek, so this scans from the smallest key.
 func (c *concurrentSkipMap[K, V]) SubMap(from, to K) SortedMap[K, V] {
 	out := NewTreeMapOrdered[K, V]()
 	if from > to {
@@ -694,6 +699,7 @@ func (c *concurrentSkipMap[K, V]) HeadMap(to K, inclusive bool) SortedMap[K, V] 
 }
 
 // TailMap returns entries with keys > from (or >= if inclusive) (snapshot).
+// O(n) regardless of the result size: the skip list's public API offers no pivot seek, so this scans from the smallest key.
 func (c *concurrentSkipMap[K, V]) TailMap(from K, inclusive bool) SortedMap[K, V] {
 	out := NewTreeMapOrdered[K, V]()
 	c.m.Range(func(k K, v V) bool {

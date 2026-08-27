@@ -52,7 +52,6 @@ Generic, fast, and ergonomic collections for Go 1.25+. This library provides a c
 ## Features
 
 - **Type-Safe Generics**: All collections are fully generic with compile-time type safety
-- **Type-Safe Generics**: All collections are fully generic with compile-time type safety
 - **Interface Segregation**: Small, focused interfaces composed into higher-level ones
 - **Go 1.25+ Iteration**: Native support for `iter.Seq` and `iter.Seq2` for seamless for-range loops
 - **Consistent API**: Uniform naming across Set/Map/List; `(value, ok)` return patterns
@@ -522,6 +521,8 @@ higher, _ := m.HigherKey(2)    // 3
 
 Thread-safe hash map backed by `xsync.MapOf`.
 
+**Callback Note:** The compute-family callbacks (`GetOrCompute`, `Compute`, `ComputeIfAbsent`, `ComputeIfPresent`, `Merge`) run while an internal bucket lock is held: they must not call back into the same map, and should be short. A panic inside a callback is propagated after the lock is released and leaves the map unchanged and usable.
+
 **Constructors:**
 
 ```go
@@ -577,7 +578,7 @@ func NewConcurrentTreeMapFrom[K comparable, V any](cmpK Comparator[K], m map[K]V
 
 Lock-free concurrent sorted map backed by skip list. For `Ordered` keys only.
 
-**Atomicity Note:** Single-key operations (`Get`/`PutIfAbsent`/`RemoveAndGet`) are atomic. `Put` stores atomically, but reports the old value from a separate load, so the returned old value is **best-effort** when writers race on one key. `CompareAndSwap` and `CompareAndDelete` are likewise **best-effort** due to the lock-free nature of skip lists, and navigation queries (`FirstKey`/`LastKey`/`Floor`/`Ceiling`/…) answer by scanning, so they return best-effort snapshots at O(n) cost. For strict semantics, use `ConcurrentTreeMap` instead.
+**Atomicity Note:** Single-key operations (`Get`/`PutIfAbsent`/`RemoveAndGet`) are atomic. `Put` stores atomically, but reports the old value from a separate load, so the returned old value is **best-effort** when writers race on one key. `CompareAndSwap` and `CompareAndDelete` are likewise **best-effort** due to the lock-free nature of skip lists, and navigation queries (`FirstKey`/`LastKey`/`Floor`/`Ceiling`/…) as well as from-pivot range queries (`RangeFrom`/`AscendFrom`/`TailMap`/…) answer by scanning from the smallest key, so they cost O(n) regardless of the result size. `GetOrCompute`/`ComputeIfAbsent` run their compute callback without any lock — it may call back into the map and a panic in it stores nothing, but when two writers race on the same absent key both may compute and the loser's result is discarded. For strict semantics, use `ConcurrentTreeMap` instead.
 
 **Constructors:**
 
@@ -746,7 +747,7 @@ func NewLockFreeListOrdered[T comparable]() List[T]
 func NewLockFreeListFrom[T any](eq Equaler[T], elements ...T) List[T]
 ```
 
-**Note:** `Add` walks the chain to append, so it is O(n) and bulk building is O(n²); removals are logical, so traversal cost also grows with removals until `Clear`. Best suited to small, hot lists where lock-free progress matters more than throughput at scale.
+**Note:** `Add` walks the chain to append, so it is O(n) and bulk building is O(n²); removals are logical, so traversal cost also grows with removals until `Clear`. `Size` and `IsEmpty` traverse the chain (O(n)) — there is no element counter, because a counter maintained beside the chain cannot stay consistent with a concurrent `Clear`. Each node holds its value and deletion state in one atomic pointer, so `Set` and a removal of the same element linearize against each other. Best suited to small, hot lists where lock-free progress matters more than throughput at scale.
 
 ### Concurrent List Comparison
 
@@ -754,10 +755,10 @@ func NewLockFreeListFrom[T any](eq Equaler[T], elements ...T) List[T]
 |---------|---------|----------|--------------|
 | **Read Performance** | O(1) lock-free | O(1) under read lock | O(n) traversal |
 | **Write Performance** | O(n) copy | O(1) amortized under write lock | O(n) walk + CAS |
-| **Memory Overhead** | High (full copy on write) | Low | Medium (node + deleted flag) |
+| **Memory Overhead** | High (full copy on write) | Low | Medium (one node per element) |
 | **Consistency** | Snapshot reads | Per-call atomic | Eventual (logical deletion) |
 | **Best For** | Read-heavy, rare writes | Balanced read/write | Small hot lists under high contention |
-| **Size Accuracy** | Exact | Exact | Approximate |
+| **Size Accuracy** | Exact | Exact | O(n) traversal; approximate under races |
 | **Random Access** | O(1) | O(1) | O(n) |
 | **Iteration** | Snapshot | Snapshot | Snapshot |
 
@@ -771,9 +772,9 @@ func NewLockFreeListFrom[T any](eq Equaler[T], elements ...T) List[T]
 | Operation | COWList | SyncList | LockFreeList |
 |-----------|---------|----------|--------------|
 | Get/Contains | Atomic (snapshot) | Atomic (lock) | Atomic |
+| Set/Remove | Atomic (full copy) | Atomic (lock) | Atomic per node (single CAS) |
 | Add/Insert | Atomic (full copy) | Atomic (lock) | Best-effort CAS |
-| Remove | Atomic (full copy) | Atomic (lock) | Best-effort CAS |
-| Size | Exact | Exact | Approximate |
+| Size | Exact | Exact | O(n) traversal; approximate under races |
 | Iteration | Snapshot | Snapshot | Snapshot |
 
 ---

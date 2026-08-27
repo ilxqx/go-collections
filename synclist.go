@@ -16,8 +16,13 @@ import (
 //
 // Atomicity:
 //   - ATOMIC: every single method call runs under the lock
-//   - Iteration methods (Seq/ForEach/Reversed) copy a snapshot first, so user
-//     callbacks never run while the lock is held
+//   - Iteration methods (Seq/ForEach/Reversed/Filter) copy a snapshot first,
+//     so user callbacks never run while the lock is held
+//   - Every other callback (the Equaler of Remove/IndexOf/Contains, the
+//     predicates of Find/RemoveFunc/RetainFunc/Every, the Comparator of
+//     Sort) runs while the lock is held — that is what makes those calls
+//     atomic. Such a callback must not call back into the same list, or it
+//     will deadlock.
 type syncList[T any] struct {
 	mu   sync.RWMutex
 	data []T
