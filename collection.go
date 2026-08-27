@@ -696,7 +696,9 @@ type ConcurrentSortedSet[T any] interface {
 //   - NON-ATOMIC: PutAll, RemoveAll, RemoveFunc, ReplaceAll, Keys, Values, Entries, Seq
 //
 // Implementation notes:
-//   - ConcurrentHashMap (xsync.MapOf): All operations are strictly atomic.
+//   - ConcurrentHashMap (xsync.MapOf): all single-key operations are strictly
+//     atomic; bulk operations (PutAll, RemoveFunc, ReplaceAll, iteration) are
+//     compositions of atomic per-key steps, not atomic as a whole.
 //   - ConcurrentSkipMap (lock-free skip list): Single-key ops are atomic;
 //     compound ops — Put's old-value report, CompareAndSwap and the like —
 //     use load-then-modify and may race.

@@ -416,10 +416,12 @@ func (m *concurrentHashMap[K, V]) ReplaceIf(key K, oldValue, newValue V, eq Equa
 	return ok
 }
 
-// ReplaceAll replaces each value with function(key, value).
+// ReplaceAll replaces each value with function(key, value), entry by entry —
+// not atomic as a whole.
 // The function runs while an internal bucket lock is held: it must not
 // call back into the same map. A panic in it is propagated after the lock
-// is released and leaves the entry being replaced unchanged.
+// is released and leaves the entry being replaced unchanged; entries already
+// replaced stay replaced.
 func (m *concurrentHashMap[K, V]) ReplaceAll(function func(key K, value V) V) {
 	var (
 		panicked bool
