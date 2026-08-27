@@ -120,13 +120,11 @@ linters:
         linters: [revive]
         text: "unchecked-type-assertion"
 
-      # computeAbort exists to be deferred: it is the shared recover handler
-      # for every user callback handed to xsync's Compute, and its only call
-      # sites are defer statements — which the rule cannot see across the
-      # function boundary.
-      - path: 'concurrent_hashmap\.go'
-        linters: [revive]
-        text: "recover must be called inside a deferred function"
+      # The panicnil compat test panics with a nil value on purpose: that is
+      # the exact input GODEBUG=panicnil=1 changes and the guard must handle.
+      - path: 'concurrent_hashmap_test\.go'
+        linters: [govet]
+        text: "panic with nil value"
 
       # A coverage-style test exercises every method of one container in one
       # function, so its length tracks the size of the contract rather than

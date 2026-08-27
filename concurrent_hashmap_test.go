@@ -648,6 +648,62 @@ func TestConcurrentHashMap_DecodeConcurrentWithReaders(t *testing.T) {
 	wg.Wait()
 }
 
+// Regression: the callback panic guard used to test recover()'s value, which
+// is nil for panic(nil) under GODEBUG=panicnil=1 — the panic was swallowed
+// and a zero value written to the map. Detection now uses a completion flag.
+func TestConcurrentHashMap_CallbackPanicNilCompat(t *testing.T) {
+	t.Setenv("GODEBUG", "panicnil=1")
+	// Verify the compat mode applies dynamically before relying on it.
+	probe := any("sentinel")
+	func() {
+		defer func() { probe = recover() }()
+		panic(nil)
+	}()
+	if probe != nil {
+		t.Skipf("GODEBUG=panicnil=1 did not apply (recover returned %v)", probe)
+	}
+
+	mustPanic := func(name string, fn func()) {
+		t.Helper()
+		panicked := true
+		func() {
+			defer func() { _ = recover() }()
+			fn()
+			panicked = false
+		}()
+		require.True(t, panicked, "%s must propagate panic(nil), not swallow it", name)
+	}
+
+	m := NewConcurrentHashMap[string, int]()
+	m.Put("k", 7)
+
+	mustPanic("Compute", func() {
+		m.Compute("k", func(string, int, bool) (int, bool) { panic(nil) })
+	})
+	v, ok := m.Get("k")
+	require.True(t, ok, "the key should survive the panic")
+	require.Equal(t, 7, v, "the existing value must not be overwritten with a zero value")
+
+	mustPanic("Compute(absent)", func() {
+		m.Compute("absent", func(string, int, bool) (int, bool) { panic(nil) })
+	})
+	require.False(t, m.ContainsKey("absent"), "no zero value must be inserted for the absent key")
+
+	mustPanic("GetOrCompute", func() {
+		m.GetOrCompute("absent", func() int { panic(nil) })
+	})
+	require.False(t, m.ContainsKey("absent"), "a canceled compute must store nothing")
+
+	mustPanic("RemoveIf", func() {
+		m.RemoveIf("k", 7, func(int, int) bool { panic(nil) })
+	})
+	require.True(t, m.ContainsKey("k"), "the entry must survive a panicking eq")
+
+	old, existed := m.Put("k", 8)
+	require.True(t, existed, "the map must stay usable after the panics")
+	require.Equal(t, 7, old, "the stored value must be intact")
+}
+
 // Regression: gob allocates a zero-value concrete receiver when decoding an
 // interface field; GobDecode then nil-panicked on the uninitialized backing map.
 func TestConcurrentHashMap_GobInterfaceRoundTrip(t *testing.T) {

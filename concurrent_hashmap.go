@@ -29,17 +29,23 @@ func NewConcurrentHashMapFrom[K comparable, V any](src map[K]V) ConcurrentMap[K,
 	return m
 }
 
-// computeAbort is deferred inside every callback handed to xsync's Compute
-// that runs a user function: it records a panic from that function and
-// rewrites the callback result so the map is left unchanged (write the old
-// value back when the key exists, delete the absent key otherwise — both
-// no-ops). The internal bucket lock is then released normally and the panic
-// is re-raised by the caller after Compute returns.
-func computeAbort[V any](panicked *bool, panicVal *any, newValue *V, del *bool, prev V, loaded bool) {
-	if p := recover(); p != nil {
-		*panicked, *panicVal = true, p
-		*newValue, *del = prev, !loaded
-	}
+// runGuarded runs fn — a user callback executing while an internal bucket
+// lock is held — and captures a panic instead of letting it unwind through
+// xsync, which would leave that lock held forever. The panic is detected by
+// the completion flag rather than recover's value, so panic(nil) under
+// GODEBUG=panicnil=1 is captured too. The caller then returns a result that
+// leaves the map unchanged and re-raises the panic once the lock has been
+// released.
+func runGuarded(panicked *bool, panicVal *any, fn func()) {
+	completed := false
+	defer func() {
+		if !completed {
+			*panicked = true
+			*panicVal = recover()
+		}
+	}()
+	fn()
+	completed = true
 }
 
 // Size returns an approximate number of entries.
@@ -130,14 +136,18 @@ func (m *concurrentHashMap[K, V]) RemoveIf(key K, value V, eq Equaler[V]) bool {
 		panicked bool
 		panicVal any
 	)
-	m.m.Compute(key, func(prev V, loaded bool) (newValue V, del bool) {
-		defer computeAbort(&panicked, &panicVal, &newValue, &del, prev, loaded)
+	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
 		// Deleting an absent key is a no-op; returning del=false would
 		// insert prev (a zero value) for the key.
 		if !loaded {
 			return prev, true
 		}
-		if eq(prev, value) {
+		var match bool
+		runGuarded(&panicked, &panicVal, func() { match = eq(prev, value) })
+		if panicked {
+			return prev, false // keep the old value: the map stays unchanged
+		}
+		if match {
 			removed = true
 			var zero V
 			return zero, true // delete
@@ -220,9 +230,13 @@ func (m *concurrentHashMap[K, V]) Compute(key K, remapping func(key K, oldValue 
 		panicked bool
 		panicVal any
 	)
-	m.m.Compute(key, func(prev V, loaded bool) (newValue V, del bool) {
-		defer computeAbort(&panicked, &panicVal, &newValue, &del, prev, loaded)
-		newVal, keep := remapping(key, prev, loaded)
+	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
+		var newVal V
+		var keep bool
+		runGuarded(&panicked, &panicVal, func() { newVal, keep = remapping(key, prev, loaded) })
+		if panicked {
+			return prev, !loaded // no-op: keep an existing value, delete an absent key
+		}
 		if !keep {
 			ok = false
 			var zero V
@@ -256,14 +270,14 @@ func (m *concurrentHashMap[K, V]) loadOrTryCompute(key K, compute func() V) (V, 
 		panicked bool
 		panicVal any
 	)
-	v, loaded := m.m.LoadOrTryCompute(key, func() (newValue V, cancel bool) {
-		defer func() {
-			if p := recover(); p != nil {
-				panicked, panicVal = true, p
-				cancel = true
-			}
-		}()
-		return compute(), false
+	v, loaded := m.m.LoadOrTryCompute(key, func() (V, bool) {
+		var nv V
+		runGuarded(&panicked, &panicVal, func() { nv = compute() })
+		if panicked {
+			var zero V
+			return zero, true // cancel the store
+		}
+		return nv, false
 	})
 	if panicked {
 		panic(panicVal)
@@ -282,15 +296,19 @@ func (m *concurrentHashMap[K, V]) ComputeIfPresent(key K, remapping func(key K, 
 		panicked bool
 		panicVal any
 	)
-	m.m.Compute(key, func(prev V, loaded bool) (newValue V, del bool) {
+	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
 		if !loaded {
 			ok = false
 			// Deleting an absent key is a no-op; returning del=false would
 			// insert prev (a zero value) for the key.
 			return prev, true
 		}
-		defer computeAbort(&panicked, &panicVal, &newValue, &del, prev, loaded)
-		newVal, keep := remapping(key, prev)
+		var newVal V
+		var keep bool
+		runGuarded(&panicked, &panicVal, func() { newVal, keep = remapping(key, prev) })
+		if panicked {
+			return prev, false // keep the old value: the map stays unchanged
+		}
 		if !keep {
 			ok = false
 			var zero V
@@ -318,14 +336,18 @@ func (m *concurrentHashMap[K, V]) Merge(key K, value V, remapping func(oldValue,
 		panicked bool
 		panicVal any
 	)
-	m.m.Compute(key, func(prev V, loaded bool) (newValue V, del bool) {
+	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
 		if !loaded {
 			ok = true
 			out = value
 			return value, false
 		}
-		defer computeAbort(&panicked, &panicVal, &newValue, &del, prev, loaded)
-		merged, keep := remapping(prev, value)
+		var merged V
+		var keep bool
+		runGuarded(&panicked, &panicVal, func() { merged, keep = remapping(prev, value) })
+		if panicked {
+			return prev, false // keep the old value: the map stays unchanged
+		}
 		if !keep {
 			ok = false
 			var zero V
@@ -371,14 +393,18 @@ func (m *concurrentHashMap[K, V]) ReplaceIf(key K, oldValue, newValue V, eq Equa
 		panicked bool
 		panicVal any
 	)
-	m.m.Compute(key, func(prev V, loaded bool) (nv V, del bool) {
-		defer computeAbort(&panicked, &panicVal, &nv, &del, prev, loaded)
+	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
 		// Deleting an absent key is a no-op; returning del=false would
 		// insert prev (a zero value) for the key.
 		if !loaded {
 			return prev, true
 		}
-		if eq(prev, oldValue) {
+		var match bool
+		runGuarded(&panicked, &panicVal, func() { match = eq(prev, oldValue) })
+		if panicked {
+			return prev, false // keep the old value: the map stays unchanged
+		}
+		if match {
 			ok = true
 			return newValue, false
 		}
@@ -400,14 +426,18 @@ func (m *concurrentHashMap[K, V]) ReplaceAll(function func(key K, value V) V) {
 		panicVal any
 	)
 	m.m.Range(func(k K, _ V) bool {
-		m.m.Compute(k, func(prev V, loaded bool) (newValue V, del bool) {
-			defer computeAbort(&panicked, &panicVal, &newValue, &del, prev, loaded)
+		m.m.Compute(k, func(prev V, loaded bool) (V, bool) {
 			// The key can vanish between Range and Compute; deleting an
 			// absent key is a no-op, del=false would insert a zero value.
 			if !loaded {
 				return prev, true
 			}
-			return function(k, prev), false
+			var nv V
+			runGuarded(&panicked, &panicVal, func() { nv = function(k, prev) })
+			if panicked {
+				return prev, false // leave this entry unchanged
+			}
+			return nv, false
 		})
 		return !panicked
 	})
@@ -538,14 +568,18 @@ func (m *concurrentHashMap[K, V]) CompareAndSwap(key K, oldValue, newValue V, eq
 		panicked bool
 		panicVal any
 	)
-	m.m.Compute(key, func(prev V, loaded bool) (nv V, del bool) {
-		defer computeAbort(&panicked, &panicVal, &nv, &del, prev, loaded)
+	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
 		// Deleting an absent key is a no-op; returning del=false would
 		// insert prev (a zero value) for the key.
 		if !loaded {
 			return prev, true
 		}
-		if eq(prev, oldValue) {
+		var match bool
+		runGuarded(&panicked, &panicVal, func() { match = eq(prev, oldValue) })
+		if panicked {
+			return prev, false // keep the old value: the map stays unchanged
+		}
+		if match {
 			swapped = true
 			return newValue, false
 		}
@@ -567,14 +601,18 @@ func (m *concurrentHashMap[K, V]) CompareAndDelete(key K, value V, eq Equaler[V]
 		panicked bool
 		panicVal any
 	)
-	m.m.Compute(key, func(prev V, loaded bool) (newValue V, del bool) {
-		defer computeAbort(&panicked, &panicVal, &newValue, &del, prev, loaded)
+	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
 		// Deleting an absent key is a no-op; returning del=false would
 		// insert prev (a zero value) for the key.
 		if !loaded {
 			return prev, true
 		}
-		if eq(prev, value) {
+		var match bool
+		runGuarded(&panicked, &panicVal, func() { match = eq(prev, value) })
+		if panicked {
+			return prev, false // keep the old value: the map stays unchanged
+		}
+		if match {
 			deleted = true
 			var zero V
 			return zero, true
