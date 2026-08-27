@@ -412,14 +412,12 @@ func (c *concurrentTreeSet[T]) Every(predicate func(element T) bool) bool {
 func (c *concurrentTreeSet[T]) AddIfAbsent(element T) bool { return c.Add(element) }
 
 // RemoveAndGet atomically removes and returns the element if present.
+// The returned element is the one that was stored, which can differ from
+// the argument when the comparator treats distinct values as equivalent.
 func (c *concurrentTreeSet[T]) RemoveAndGet(element T) (T, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.tree.Remove(element) {
-		return element, true
-	}
-	var zero T
-	return zero, false
+	return c.tree.removeAndGet(element)
 }
 
 // First returns the smallest element.

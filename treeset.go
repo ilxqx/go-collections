@@ -132,6 +132,13 @@ func (t *treeSet[T]) Remove(element T) bool {
 	return ok
 }
 
+// removeAndGet deletes the element if present and returns the element that
+// was actually stored — which can differ from the argument when the
+// comparator treats distinct values as equivalent.
+func (t *treeSet[T]) removeAndGet(element T) (T, bool) {
+	return t.bt.Delete(element)
+}
+
 // RemoveAll deletes all given elements. Returns the number removed.
 func (t *treeSet[T]) RemoveAll(elements ...T) int {
 	removed := 0

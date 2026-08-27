@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 	"testing/synctest"
 
@@ -684,4 +685,18 @@ func TestConcurrentTreeSet_IsNotEmpty(t *testing.T) {
 	assert.False(t, s.IsNotEmpty(), "new set should not be non-empty")
 	s.Add(1)
 	assert.True(t, s.IsNotEmpty(), "set with element should be non-empty")
+}
+
+// Regression: RemoveAndGet used to return its argument instead of the
+// element that was actually stored, which differ when the comparator treats
+// distinct values as equivalent.
+func TestConcurrentTreeSet_RemoveAndGetReturnsStoredElement(t *testing.T) {
+	t.Parallel()
+	ci := func(a, b string) int { return strings.Compare(strings.ToLower(a), strings.ToLower(b)) }
+	s := NewConcurrentTreeSetFrom(ci, "stored")
+
+	v, ok := s.RemoveAndGet("STORED")
+	require.True(t, ok, "the equivalent element should be removed")
+	require.Equal(t, "stored", v, "RemoveAndGet must return the stored element, not the query")
+	require.True(t, s.IsEmpty(), "the set should be empty after the removal")
 }
