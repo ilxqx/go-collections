@@ -131,6 +131,9 @@ func (q *arrayQueue[T]) compact() {
 
 	// Shift in-place to avoid allocation for normal compaction.
 	copy(q.data[:live], q.data[q.head:])
+	// Clear the vacated tail so the backing array does not retain references
+	// to elements past the new length.
+	clear(q.data[live:])
 	q.data = q.data[:live]
 	q.head = 0
 }
