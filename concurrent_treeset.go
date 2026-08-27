@@ -12,8 +12,8 @@ import (
 
 // concurrentTreeSet is a concurrent-safe sorted set implemented by guarding treeSet with RWMutex.
 //   - Single-key operations are atomic under the mutex.
-//   - Iteration methods (Seq/ForEach/Range*/Ascend*/Reversed) operate on snapshots to avoid holding locks
-//     while invoking user callbacks.
+//   - Iteration methods (Seq/ForEach/Range*/Ascend*/Reversed/Filter) operate on snapshots to avoid
+//     holding locks while invoking user callbacks.
 //   - For operations that accept user-provided functions and need atomicity (e.g., AddIfAbsent/RemoveAndGet),
 //     the functions are executed while holding the lock. Do not call back into the same set from those
 //     callbacks to avoid deadlocks.
@@ -309,18 +309,11 @@ func (c *concurrentTreeSet[T]) Equals(other Set[T]) bool {
 // Clone returns a shallow copy (as Set).
 func (c *concurrentTreeSet[T]) Clone() Set[T] { return c.CloneSorted() }
 
-// Filter returns a new set with elements satisfying predicate (sorted).
+// Filter returns a new set with elements satisfying predicate (sorted,
+// snapshot-based). The predicate runs without the lock, so it may call back
+// into the set, and a panic in it cannot leave the lock held.
 func (c *concurrentTreeSet[T]) Filter(predicate func(element T) bool) Set[T] {
-	c.mu.RLock()
-	out := newTreeSet(c.tree.cmp)
-	c.tree.bt.Scan(func(item T) bool {
-		if predicate(item) {
-			out.bt.Set(item)
-		}
-		return true
-	})
-	c.mu.RUnlock()
-	return out
+	return c.snapshot().Filter(predicate)
 }
 
 // Find returns the first element satisfying predicate (comparator order) over snapshot.

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -762,4 +763,39 @@ func TestConcurrentTreeSet_SelfSetOpsWithWriter(t *testing.T) {
 	require.True(t, s.IsSubsetOf(s), "a set is a subset of itself")
 	require.False(t, s.IsDisjoint(s), "a non-empty set is not disjoint from itself")
 	require.True(t, s.Difference(s).IsEmpty(), "self-difference must be empty")
+}
+
+// Regression: Filter used to run the predicate under the read lock with no
+// deferred unlock, so a predicate touching the same set self-deadlocked and
+// a recovered predicate panic leaked the lock, blocking every later writer.
+func TestConcurrentTreeSet_FilterCallbackRunsUnlocked(t *testing.T) {
+	t.Parallel()
+	s := NewConcurrentTreeSetOrdered[int]()
+	s.AddAll(1, 2, 3)
+
+	filtered := make(chan Set[int], 1)
+	go func() {
+		filtered <- s.Filter(func(e int) bool {
+			s.Add(e + 100) // reenters the set the predicate is filtering
+			return e <= 3
+		})
+	}()
+	select {
+	case got := <-filtered:
+		require.Equal(t, 3, got.Size(), "Filter should keep the three original elements")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Filter deadlocked: the predicate ran while the lock was held")
+	}
+
+	require.PanicsWithValue(t, "boom", func() {
+		s.Filter(func(int) bool { panic("boom") })
+	}, "a predicate panic must propagate to the caller")
+	added := make(chan bool, 1)
+	go func() { added <- s.Add(1000) }()
+	select {
+	case ok := <-added:
+		require.True(t, ok, "the set should accept a new element")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Add blocked after a Filter predicate panic: the read lock leaked")
+	}
 }
