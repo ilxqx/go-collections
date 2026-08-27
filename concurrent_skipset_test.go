@@ -1,6 +1,8 @@
 package collections
 
 import (
+	"bytes"
+	"encoding/gob"
 	"runtime"
 	"slices"
 	"sync"
@@ -678,4 +680,22 @@ func TestConcurrentSkipSet_ClearConcurrentWithAdd(t *testing.T) {
 	wg.Wait()
 	s.Clear()
 	require.Equal(t, 0, s.Size(), "quiescent Clear should leave the set empty")
+}
+
+// Regression: gob allocates a zero-value concrete receiver when decoding an
+// interface field; GobDecode then nil-panicked on the uninitialized skip list.
+func TestConcurrentSkipSet_GobInterfaceRoundTrip(t *testing.T) {
+	t.Parallel()
+	gob.Register(NewConcurrentSkipSet[int]())
+	type payload struct{ S ConcurrentSortedSet[int] }
+	src := payload{S: NewConcurrentSkipSetFrom(1, 2)}
+
+	var buf bytes.Buffer
+	require.NoError(t, gob.NewEncoder(&buf).Encode(src), "encoding the wrapper should succeed")
+	var dst payload
+	require.NoError(t, gob.NewDecoder(&buf).Decode(&dst), "decoding into a zero-value receiver should succeed")
+
+	require.True(t, dst.S.Contains(1), "the decoded set should contain 1")
+	require.Equal(t, 2, dst.S.Size(), "the decoded set should hold both elements")
+	require.True(t, dst.S.Add(3), "the decoded set should accept writes")
 }

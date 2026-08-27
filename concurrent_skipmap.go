@@ -779,6 +779,22 @@ func (c *concurrentSkipMap[K, V]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(wrapped)
 }
 
+// refill replaces the map's contents with entries. A zero-value receiver —
+// gob allocates one when decoding an interface field — gets a fresh backing
+// skip list, which nothing else can reference yet. Otherwise the existing
+// one is refilled in place: replacing the c.m pointer would race with
+// concurrent readers of the receiver.
+func (c *concurrentSkipMap[K, V]) refill(entries []serializableEntry[K, V]) {
+	if c.m == nil {
+		c.m = skipmap.New[K, V]()
+	} else {
+		c.Clear()
+	}
+	for _, entry := range entries {
+		c.m.Store(entry.Key, entry.Value)
+	}
+}
+
 // UnmarshalJSON implements json.Unmarshaler.
 // Deserializes from a JSON object.
 // Since ConcurrentSkipMap only supports Ordered key types, no comparator is needed.
@@ -787,10 +803,7 @@ func (c *concurrentSkipMap[K, V]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &wrapped); err != nil {
 		return err
 	}
-	c.Clear()
-	for _, entry := range wrapped.Entries {
-		c.m.Store(entry.Key, entry.Value)
-	}
+	c.refill(wrapped.Entries)
 	return nil
 }
 
@@ -821,10 +834,7 @@ func (c *concurrentSkipMap[K, V]) GobDecode(data []byte) error {
 	if err := dec.Decode(&entries); err != nil {
 		return err
 	}
-	c.Clear()
-	for _, entry := range entries {
-		c.m.Store(entry.Key, entry.Value)
-	}
+	c.refill(entries)
 	return nil
 }
 

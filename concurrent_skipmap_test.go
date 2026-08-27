@@ -1,6 +1,8 @@
 package collections
 
 import (
+	"bytes"
+	"encoding/gob"
 	"runtime"
 	"slices"
 	"sync"
@@ -863,4 +865,29 @@ func TestConcurrentSkipMap_GetOrComputeCallbackRunsUnlocked(t *testing.T) {
 		m.ComputeIfAbsent(5, func(int) int { panic("boom") })
 	}, "ComputeIfAbsent must propagate the callback panic")
 	require.False(t, m.ContainsKey(5), "a panicking mapping must store nothing")
+}
+
+// Regression: gob allocates a zero-value concrete receiver when decoding an
+// interface field; GobDecode then nil-panicked on the uninitialized skip list.
+func TestConcurrentSkipMap_GobInterfaceRoundTrip(t *testing.T) {
+	t.Parallel()
+	gob.Register(NewConcurrentSkipMap[int, string]())
+	type payload struct {
+		M ConcurrentSortedMap[int, string]
+	}
+	src := payload{M: NewConcurrentSkipMap[int, string]()}
+	src.M.Put(1, "one")
+	src.M.Put(2, "two")
+
+	var buf bytes.Buffer
+	require.NoError(t, gob.NewEncoder(&buf).Encode(src), "encoding the wrapper should succeed")
+	var dst payload
+	require.NoError(t, gob.NewDecoder(&buf).Decode(&dst), "decoding into a zero-value receiver should succeed")
+
+	v, ok := dst.M.Get(1)
+	require.True(t, ok, "the decoded map should contain key 1")
+	require.Equal(t, "one", v, "the decoded value should round-trip")
+	require.Equal(t, 2, dst.M.Size(), "the decoded map should hold both entries")
+	dst.M.Put(3, "three")
+	require.True(t, dst.M.ContainsKey(3), "the decoded map should accept writes")
 }

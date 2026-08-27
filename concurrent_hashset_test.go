@@ -1,6 +1,7 @@
 package collections
 
 import (
+	"bytes"
 	"encoding/gob"
 	"encoding/json"
 	"runtime"
@@ -302,4 +303,22 @@ func TestConcurrentHashSet_DecodeConcurrentWithReaders(t *testing.T) {
 		}
 	})
 	wg.Wait()
+}
+
+// Regression: gob allocates a zero-value concrete receiver when decoding an
+// interface field; GobDecode then nil-panicked on the uninitialized backing map.
+func TestConcurrentHashSet_GobInterfaceRoundTrip(t *testing.T) {
+	t.Parallel()
+	gob.Register(NewConcurrentHashSet[string]())
+	type payload struct{ S Set[string] }
+	src := payload{S: NewConcurrentHashSetFrom("a", "b")}
+
+	var buf bytes.Buffer
+	require.NoError(t, gob.NewEncoder(&buf).Encode(src), "encoding the wrapper should succeed")
+	var dst payload
+	require.NoError(t, gob.NewDecoder(&buf).Decode(&dst), "decoding into a zero-value receiver should succeed")
+
+	require.True(t, dst.S.Contains("a"), "the decoded set should contain a")
+	require.Equal(t, 2, dst.S.Size(), "the decoded set should hold both elements")
+	require.True(t, dst.S.Add("c"), "the decoded set should accept writes")
 }

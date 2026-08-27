@@ -605,6 +605,22 @@ func (m *concurrentHashMap[K, V]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(snapshot)
 }
 
+// refill replaces the map's contents with snapshot. A zero-value receiver —
+// gob allocates one when decoding an interface field — gets a fresh backing
+// map, which nothing else can reference yet. Otherwise the existing backing
+// map is refilled in place: replacing the m.m pointer would race with
+// concurrent readers of the receiver.
+func (m *concurrentHashMap[K, V]) refill(snapshot map[K]V) {
+	if m.m == nil {
+		m.m = xsync.NewMapOf[K, V]()
+	} else {
+		m.m.Clear()
+	}
+	for key, value := range snapshot {
+		m.m.Store(key, value)
+	}
+}
+
 // UnmarshalJSON implements json.Unmarshaler.
 // Deserializes from a JSON object.
 func (m *concurrentHashMap[K, V]) UnmarshalJSON(data []byte) error {
@@ -612,12 +628,7 @@ func (m *concurrentHashMap[K, V]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &snapshot); err != nil {
 		return err
 	}
-	// Refill the existing backing map: replacing the m.m pointer would race
-	// with concurrent readers of the receiver.
-	m.m.Clear()
-	for key, value := range snapshot {
-		m.m.Store(key, value)
-	}
+	m.refill(snapshot)
 	return nil
 }
 
@@ -646,12 +657,7 @@ func (m *concurrentHashMap[K, V]) GobDecode(data []byte) error {
 	if err := dec.Decode(&snapshot); err != nil {
 		return err
 	}
-	// Refill the existing backing map: replacing the m.m pointer would race
-	// with concurrent readers of the receiver.
-	m.m.Clear()
-	for key, value := range snapshot {
-		m.m.Store(key, value)
-	}
+	m.refill(snapshot)
 	return nil
 }
 

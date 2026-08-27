@@ -667,6 +667,22 @@ func (c *concurrentSkipSet[T]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.ToSlice())
 }
 
+// refill replaces the set's contents with elements. A zero-value receiver —
+// gob allocates one when decoding an interface field — gets a fresh backing
+// skip list, which nothing else can reference yet. Otherwise the existing
+// one is refilled in place: replacing the c.s pointer would race with
+// concurrent readers of the receiver.
+func (c *concurrentSkipSet[T]) refill(elements []T) {
+	if c.s == nil {
+		c.s = skipset.New[T]()
+	} else {
+		c.Clear()
+	}
+	for _, elem := range elements {
+		c.s.Add(elem)
+	}
+}
+
 // UnmarshalJSON implements json.Unmarshaler.
 // Deserializes from a JSON array.
 // Since ConcurrentSkipSet only supports Ordered types, no comparator is needed.
@@ -675,10 +691,7 @@ func (c *concurrentSkipSet[T]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &slice); err != nil {
 		return err
 	}
-	c.Clear()
-	for _, elem := range slice {
-		c.s.Add(elem)
-	}
+	c.refill(slice)
 	return nil
 }
 
@@ -701,10 +714,7 @@ func (c *concurrentSkipSet[T]) GobDecode(data []byte) error {
 	if err := dec.Decode(&slice); err != nil {
 		return err
 	}
-	c.Clear()
-	for _, elem := range slice {
-		c.s.Add(elem)
-	}
+	c.refill(slice)
 	return nil
 }
 
