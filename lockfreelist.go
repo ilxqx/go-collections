@@ -19,9 +19,13 @@ import (
 //   - Suitable for small, hot lists in high-concurrency scenarios
 //
 // Atomicity:
-//   - ATOMIC: Contains, Add, Set (per element), Size (approximate)
-//   - BEST-EFFORT: Remove, Insert (may retry under contention)
-//   - NON-ATOMIC: Bulk operations, iteration (snapshot semantics)
+//   - ATOMIC (per node): a node's value and its deletion state live in one
+//     atomic pointer (nil = deleted), so Contains/Set/Remove observe and
+//     change them in a single step — a Set and a removal of the same
+//     element linearize against each other
+//   - BEST-EFFORT: index-based operations (which element an index names can
+//     shift under concurrent modification; they retry when they lose a race)
+//   - NON-ATOMIC: bulk operations, iteration (snapshot semantics)
 //
 // Structure: head and tail are permanent sentinel nodes — they never change
 // for the lifetime of the list, so every CAS races only on next pointers.
@@ -34,18 +38,22 @@ import (
 //   - Removal is logical: deleted nodes stay in the chain (skipped by every
 //     operation) until Clear detaches them, so traversal cost grows with the
 //     number of removals since the last Clear.
-//   - Size is approximate under concurrent modification; Get(index) is O(n).
+//   - Size and IsEmpty traverse the chain (O(n), early exit for IsEmpty).
+//     There is no element counter: a counter maintained beside the chain
+//     cannot stay consistent with a concurrent Clear, so the chain itself is
+//     the single source of truth. Get(index) is O(n).
 type lockFreeList[T any] struct {
 	head *lfNode[T] // permanent sentinel; head.next is the first element
 	tail *lfNode[T] // permanent sentinel terminating the chain
-	size atomic.Int64
 	eq   Equaler[T]
 }
 
+// lfNode is a chain node. state holds the element while the node is live and
+// nil once it is logically deleted, so value and deletion state are observed
+// and changed in a single atomic step.
 type lfNode[T any] struct {
-	value   atomic.Pointer[T]
-	next    atomic.Pointer[lfNode[T]]
-	deleted atomic.Bool // Logical deletion marker
+	state atomic.Pointer[T]
+	next  atomic.Pointer[lfNode[T]]
 }
 
 // NewLockFreeList creates a new lock-free list.
@@ -74,22 +82,34 @@ func NewLockFreeListFrom[T any](eq Equaler[T], elements ...T) List[T] {
 	return l
 }
 
-// newLFNode creates a node holding value.
+// newLFNode creates a live node holding value.
 func newLFNode[T any](value T) *lfNode[T] {
 	node := &lfNode[T]{}
-	node.value.Store(&value)
+	node.state.Store(&value)
 	return node
 }
 
-// Size returns the approximate number of elements.
-// Note: Due to concurrent modifications, this may not be exact.
+// Size returns the number of elements by traversing the chain (O(n)).
+// Under concurrent modification the count is a best-effort snapshot.
 func (l *lockFreeList[T]) Size() int {
-	return int(l.size.Load())
+	n := 0
+	for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
+		if curr.state.Load() != nil {
+			n++
+		}
+	}
+	return n
 }
 
-// IsEmpty reports whether the list appears empty.
+// IsEmpty reports whether the list appears empty (O(n) worst case, but stops
+// at the first live element).
 func (l *lockFreeList[T]) IsEmpty() bool {
-	return l.Size() == 0
+	for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
+		if curr.state.Load() != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // IsNotEmpty reports whether the list contains at least one element.
@@ -106,22 +126,15 @@ func (l *lockFreeList[T]) Clear() {
 			break
 		}
 	}
-	l.size.Store(0)
 }
 
 // ToSlice returns a snapshot of all elements.
 func (l *lockFreeList[T]) ToSlice() []T {
-	size := l.Size()
-	if size == 0 {
-		return nil
-	}
-	result := make([]T, 0, size)
-	curr := l.head.next.Load()
-	for curr != nil && curr != l.tail {
-		if !curr.deleted.Load() {
-			result = append(result, *curr.value.Load())
+	var result []T
+	for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
+		if v := curr.state.Load(); v != nil {
+			result = append(result, *v)
 		}
-		curr = curr.next.Load()
 	}
 	return result
 }
@@ -153,17 +166,14 @@ func (l *lockFreeList[T]) Get(index int) (T, bool) {
 		return zero, false
 	}
 
-	curr := l.head.next.Load()
 	i := 0
-
-	for curr != nil && curr != l.tail {
-		if !curr.deleted.Load() {
+	for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
+		if v := curr.state.Load(); v != nil {
 			if i == index {
-				return *curr.value.Load(), true
+				return *v, true
 			}
 			i++
 		}
-		curr = curr.next.Load()
 	}
 
 	var zero T
@@ -171,40 +181,50 @@ func (l *lockFreeList[T]) Get(index int) (T, bool) {
 }
 
 // Set replaces the element at index (O(n) operation).
-// The value swap itself is atomic per node.
+// The replacement is a single CAS on the node's state, so it linearizes
+// against a concurrent removal of the same node: exactly one of them
+// observes the old value.
 func (l *lockFreeList[T]) Set(index int, element T) (T, bool) {
 	if index < 0 {
 		var zero T
 		return zero, false
 	}
 
-	curr := l.head.next.Load()
-	i := 0
-
-	for curr != nil && curr != l.tail {
-		if !curr.deleted.Load() {
-			if i == index {
-				old := curr.value.Swap(&element)
-				return *old, true
+retry:
+	for {
+		i := 0
+		for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
+			v := curr.state.Load()
+			if v == nil {
+				continue
 			}
-			i++
+			if i != index {
+				i++
+				continue
+			}
+			for {
+				if curr.state.CompareAndSwap(v, &element) {
+					return *v, true
+				}
+				v = curr.state.Load()
+				if v == nil {
+					// The node was removed under us; the index now names a
+					// different element, so resolve it again.
+					continue retry
+				}
+			}
 		}
-		curr = curr.next.Load()
+		var zero T
+		return zero, false
 	}
-
-	var zero T
-	return zero, false
 }
 
 // First returns the first element.
 func (l *lockFreeList[T]) First() (T, bool) {
-	curr := l.head.next.Load()
-
-	for curr != nil && curr != l.tail {
-		if !curr.deleted.Load() {
-			return *curr.value.Load(), true
+	for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
+		if v := curr.state.Load(); v != nil {
+			return *v, true
 		}
-		curr = curr.next.Load()
 	}
 
 	var zero T
@@ -213,18 +233,15 @@ func (l *lockFreeList[T]) First() (T, bool) {
 
 // Last returns the last element (O(n) operation).
 func (l *lockFreeList[T]) Last() (T, bool) {
-	var last *lfNode[T]
-	curr := l.head.next.Load()
-
-	for curr != nil && curr != l.tail {
-		if !curr.deleted.Load() {
-			last = curr
+	var last *T
+	for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
+		if v := curr.state.Load(); v != nil {
+			last = v
 		}
-		curr = curr.next.Load()
 	}
 
 	if last != nil {
-		return *last.value.Load(), true
+		return *last, true
 	}
 	var zero T
 	return zero, false
@@ -247,7 +264,6 @@ func (l *lockFreeList[T]) Add(element T) {
 		// Try to insert before tail
 		node.next.Store(l.tail)
 		if pred.next.CompareAndSwap(l.tail, node) {
-			l.size.Add(1)
 			return
 		}
 		// CAS failed, retry
@@ -268,7 +284,7 @@ func (l *lockFreeList[T]) AddSeq(seq iter.Seq[T]) {
 	}
 }
 
-// Insert inserts the element at index.
+// Insert inserts the element at index. Valid indexes are 0 through Size().
 func (l *lockFreeList[T]) Insert(index int, element T) bool {
 	if index < 0 {
 		return false
@@ -283,13 +299,14 @@ func (l *lockFreeList[T]) Insert(index int, element T) bool {
 		pred := l.head
 		curr := pred.next.Load()
 		i := 0
+		found := false
 
-		// Find the node at position (index-1) to insert after it
+		// Find the (index-1)-th live node to insert after it.
 		for curr != nil && curr != l.tail {
-			if !curr.deleted.Load() {
+			if curr.state.Load() != nil {
 				if i == index-1 {
-					// Found the predecessor, insert after curr
 					pred = curr
+					found = true
 					break
 				}
 				i++
@@ -298,17 +315,14 @@ func (l *lockFreeList[T]) Insert(index int, element T) bool {
 			curr = curr.next.Load()
 		}
 
-		// Check if index is out of bounds
-		// Note: when i == index-1, we found the right position to insert after
-		// When curr == tail && i < index-1, index is beyond current size
-		if i != index-1 && curr == l.tail && i < index-1 {
-			return false // Index out of bounds
+		if !found {
+			// Fewer than index live elements: out of bounds.
+			return false
 		}
 
 		next := pred.next.Load()
 		node.next.Store(next)
 		if pred.next.CompareAndSwap(next, node) {
-			l.size.Add(1)
 			return true
 		}
 		// CAS failed, retry
@@ -323,7 +337,6 @@ func (l *lockFreeList[T]) insertAtHead(element T) bool {
 		first := l.head.next.Load()
 		node.next.Store(first)
 		if l.head.next.CompareAndSwap(first, node) {
-			l.size.Add(1)
 			return true
 		}
 	}
@@ -350,63 +363,59 @@ func (l *lockFreeList[T]) RemoveAt(index int) (T, bool) {
 		return zero, false
 	}
 
+retry:
 	for {
-		curr := l.head.next.Load()
 		i := 0
-
-		for curr != nil && curr != l.tail {
-			if !curr.deleted.Load() {
-				if i == index {
-					// Logically delete
-					if curr.deleted.CompareAndSwap(false, true) {
-						l.size.Add(-1)
-						return *curr.value.Load(), true
-					}
-					// Someone else deleted it, retry
-					break
-				}
-				i++
+		for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
+			v := curr.state.Load()
+			if v == nil {
+				continue
 			}
-			curr = curr.next.Load()
+			if i != index {
+				i++
+				continue
+			}
+			if curr.state.CompareAndSwap(v, nil) {
+				return *v, true
+			}
+			// Lost a race on this node; the index may now name a
+			// different element, so resolve it again.
+			continue retry
 		}
-
-		if curr == nil || curr == l.tail {
-			var zero T
-			return zero, false
-		}
+		var zero T
+		return zero, false
 	}
 }
 
 // Remove removes the first occurrence of element.
 func (l *lockFreeList[T]) Remove(element T, eq Equaler[T]) bool {
-	curr := l.head.next.Load()
-
-	for curr != nil && curr != l.tail {
-		if !curr.deleted.Load() && eq(*curr.value.Load(), element) {
-			if curr.deleted.CompareAndSwap(false, true) {
-				l.size.Add(-1)
+	for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
+		for {
+			v := curr.state.Load()
+			if v == nil || !eq(*v, element) {
+				break
+			}
+			if curr.state.CompareAndSwap(v, nil) {
 				return true
 			}
-			// Someone else deleted it, continue searching
+			// Lost a race on this node (removed or value swapped); re-read.
 		}
-		curr = curr.next.Load()
 	}
 	return false
 }
 
 // RemoveFirst removes and returns the first element.
 func (l *lockFreeList[T]) RemoveFirst() (T, bool) {
-	curr := l.head.next.Load()
-
-	for curr != nil && curr != l.tail {
-		if !curr.deleted.Load() {
-			if curr.deleted.CompareAndSwap(false, true) {
-				l.size.Add(-1)
-				return *curr.value.Load(), true
+	for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
+		for {
+			v := curr.state.Load()
+			if v == nil {
+				break // Already removed; try the next node.
 			}
-			// Someone else deleted it, try next
+			if curr.state.CompareAndSwap(v, nil) {
+				return *v, true
+			}
 		}
-		curr = curr.next.Load()
 	}
 
 	var zero T
@@ -416,14 +425,14 @@ func (l *lockFreeList[T]) RemoveFirst() (T, bool) {
 // RemoveLast removes and returns the last element.
 func (l *lockFreeList[T]) RemoveLast() (T, bool) {
 	for {
-		var last *lfNode[T]
-		curr := l.head.next.Load()
-
-		for curr != nil && curr != l.tail {
-			if !curr.deleted.Load() {
-				last = curr
+		var (
+			last    *lfNode[T]
+			lastVal *T
+		)
+		for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
+			if v := curr.state.Load(); v != nil {
+				last, lastVal = curr, v
 			}
-			curr = curr.next.Load()
 		}
 
 		if last == nil {
@@ -431,9 +440,8 @@ func (l *lockFreeList[T]) RemoveLast() (T, bool) {
 			return zero, false
 		}
 
-		if last.deleted.CompareAndSwap(false, true) {
-			l.size.Add(-1)
-			return *last.value.Load(), true
+		if last.state.CompareAndSwap(lastVal, nil) {
+			return *lastVal, true
 		}
 		// Retry if CAS failed
 	}
@@ -442,16 +450,12 @@ func (l *lockFreeList[T]) RemoveLast() (T, bool) {
 // RemoveFunc removes all elements satisfying predicate.
 func (l *lockFreeList[T]) RemoveFunc(predicate func(element T) bool) int {
 	removed := 0
-	curr := l.head.next.Load()
-
-	for curr != nil && curr != l.tail {
-		if !curr.deleted.Load() && predicate(*curr.value.Load()) {
-			if curr.deleted.CompareAndSwap(false, true) {
-				l.size.Add(-1)
+	for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
+		if v := curr.state.Load(); v != nil && predicate(*v) {
+			if curr.state.CompareAndSwap(v, nil) {
 				removed++
 			}
 		}
-		curr = curr.next.Load()
 	}
 	return removed
 }
@@ -459,51 +463,41 @@ func (l *lockFreeList[T]) RemoveFunc(predicate func(element T) bool) int {
 // RetainFunc keeps only elements satisfying predicate.
 func (l *lockFreeList[T]) RetainFunc(predicate func(element T) bool) int {
 	removed := 0
-	curr := l.head.next.Load()
-
-	for curr != nil && curr != l.tail {
-		if !curr.deleted.Load() && !predicate(*curr.value.Load()) {
-			if curr.deleted.CompareAndSwap(false, true) {
-				l.size.Add(-1)
+	for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
+		if v := curr.state.Load(); v != nil && !predicate(*v) {
+			if curr.state.CompareAndSwap(v, nil) {
 				removed++
 			}
 		}
-		curr = curr.next.Load()
 	}
 	return removed
 }
 
 // IndexOf returns the index of the first occurrence.
 func (l *lockFreeList[T]) IndexOf(element T, eq Equaler[T]) int {
-	curr := l.head.next.Load()
 	i := 0
-
-	for curr != nil && curr != l.tail {
-		if !curr.deleted.Load() {
-			if eq(*curr.value.Load(), element) {
+	for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
+		if v := curr.state.Load(); v != nil {
+			if eq(*v, element) {
 				return i
 			}
 			i++
 		}
-		curr = curr.next.Load()
 	}
 	return -1
 }
 
 // LastIndexOf returns the index of the last occurrence.
 func (l *lockFreeList[T]) LastIndexOf(element T, eq Equaler[T]) int {
-	curr := l.head.next.Load()
 	lastIdx := -1
 	i := 0
-
-	for curr != nil && curr != l.tail {
-		if !curr.deleted.Load() {
-			if eq(*curr.value.Load(), element) {
+	for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
+		if v := curr.state.Load(); v != nil {
+			if eq(*v, element) {
 				lastIdx = i
 			}
 			i++
 		}
-		curr = curr.next.Load()
 	}
 	return lastIdx
 }
@@ -515,15 +509,10 @@ func (l *lockFreeList[T]) Contains(element T, eq Equaler[T]) bool {
 
 // Find returns the first element satisfying predicate.
 func (l *lockFreeList[T]) Find(predicate func(element T) bool) (T, bool) {
-	curr := l.head.next.Load()
-
-	for curr != nil && curr != l.tail {
-		if !curr.deleted.Load() {
-			if v := *curr.value.Load(); predicate(v) {
-				return v, true
-			}
+	for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
+		if v := curr.state.Load(); v != nil && predicate(*v) {
+			return *v, true
 		}
-		curr = curr.next.Load()
 	}
 
 	var zero T
@@ -532,17 +521,14 @@ func (l *lockFreeList[T]) Find(predicate func(element T) bool) (T, bool) {
 
 // FindIndex returns the index of the first element satisfying predicate.
 func (l *lockFreeList[T]) FindIndex(predicate func(element T) bool) int {
-	curr := l.head.next.Load()
 	i := 0
-
-	for curr != nil && curr != l.tail {
-		if !curr.deleted.Load() {
-			if predicate(*curr.value.Load()) {
+	for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
+		if v := curr.state.Load(); v != nil {
+			if predicate(*v) {
 				return i
 			}
 			i++
 		}
-		curr = curr.next.Load()
 	}
 	return -1
 }
@@ -604,13 +590,10 @@ func (l *lockFreeList[T]) Any(predicate func(element T) bool) bool {
 
 // Every returns true if all elements satisfy predicate.
 func (l *lockFreeList[T]) Every(predicate func(element T) bool) bool {
-	curr := l.head.next.Load()
-
-	for curr != nil && curr != l.tail {
-		if !curr.deleted.Load() && !predicate(*curr.value.Load()) {
+	for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
+		if v := curr.state.Load(); v != nil && !predicate(*v) {
 			return false
 		}
-		curr = curr.next.Load()
 	}
 	return true
 }

@@ -644,3 +644,65 @@ func TestLockFreeList_IsNotEmpty(t *testing.T) {
 	l.Add(1)
 	assert.True(t, l.IsNotEmpty(), "list with element should be non-empty")
 }
+
+// Regression: Clear stored 0 into a separate size counter while removals
+// decremented it after their CAS, so a Clear racing a RemoveFirst drove the
+// count negative and ToSlice panicked on a negative slice capacity.
+func TestLockFreeList_SizeConsistentWithClearRace(t *testing.T) {
+	t.Parallel()
+	for range 2000 {
+		l := NewLockFreeListOrdered[int]()
+		l.Add(1)
+
+		var wg sync.WaitGroup
+		wg.Go(func() { l.RemoveFirst() })
+		wg.Go(func() { l.Clear() })
+		wg.Wait()
+
+		require.GreaterOrEqual(t, l.Size(), 0, "Size must never be negative")
+		require.NotPanics(t, func() { l.ToSlice() }, "ToSlice must not panic after a Clear race")
+	}
+}
+
+// Regression: Set checked the deletion flag and swapped the value as two
+// separate atomic operations, so a Set racing a removal of the same element
+// could let both observe the old value — an outcome no serial order allows.
+func TestLockFreeList_SetLinearizesWithRemove(t *testing.T) {
+	t.Parallel()
+	for range 20000 {
+		l := NewLockFreeListOrdered[int]()
+		l.Add(1)
+
+		var (
+			wg             sync.WaitGroup
+			setOld, remVal int
+			setOK, remOK   bool
+		)
+		wg.Go(func() { setOld, setOK = l.Set(0, 2) })
+		wg.Go(func() { remVal, remOK = l.RemoveFirst() })
+		wg.Wait()
+
+		require.True(t, remOK, "the single element must be removable")
+		if remVal == 1 {
+			require.False(t, setOK, "if the removal took 1, the Set must have failed")
+		} else {
+			require.Equal(t, 2, remVal, "the removal must take either 1 or the Set's 2")
+			require.True(t, setOK, "if the removal took 2, the Set must have succeeded")
+			require.Equal(t, 1, setOld, "the Set must have observed the original value")
+		}
+	}
+}
+
+// Regression: the Insert bounds check was off by one and accepted
+// index == Size()+1, silently appending instead of failing.
+func TestLockFreeList_InsertBounds(t *testing.T) {
+	t.Parallel()
+	l := NewLockFreeListOrdered[int]()
+	assert.False(t, l.Insert(1, 42), "Insert past an empty list must fail")
+	assert.Equal(t, 0, l.Size(), "failed Insert must not add an element")
+
+	l.Add(10)
+	assert.False(t, l.Insert(2, 42), "Insert at Size()+1 must fail")
+	assert.True(t, l.Insert(1, 42), "Insert at Size() must append")
+	assert.Equal(t, []int{10, 42}, l.ToSlice(), "Insert at Size() should append at the end")
+}
