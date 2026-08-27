@@ -588,20 +588,23 @@ func (t *treeSet[T]) TailSet(from T, inclusive bool) SortedSet[T] {
 	return out
 }
 
-// Rank returns the 0-based rank (index) of x; -1 if not present. O(n): the
-// backing B-tree offers no item-to-rank lookup, so this scans.
+// Rank returns the 0-based rank (index) of x; -1 if not present.
+// O(log² n): binary search over the B-tree's index access.
 func (t *treeSet[T]) Rank(x T) int {
-	idx := 0
-	found := -1
-	t.bt.Scan(func(item T) bool {
-		if t.cmp(item, x) == 0 {
-			found = idx
-			return false
+	lo, hi := 0, t.bt.Len()-1
+	for lo <= hi {
+		mid := int(uint(lo+hi) >> 1)
+		item, _ := t.bt.GetAt(mid)
+		switch c := t.cmp(item, x); {
+		case c == 0:
+			return mid
+		case c < 0:
+			lo = mid + 1
+		default:
+			hi = mid - 1
 		}
-		idx++
-		return true
-	})
-	return found
+	}
+	return -1
 }
 
 // GetByRank returns the element at rank (0-based).
@@ -610,13 +613,10 @@ func (t *treeSet[T]) GetByRank(rank int) (T, bool) {
 }
 
 // CloneSorted returns a shallow copy as SortedSet.
+// The backing B-tree is copied copy-on-write, so this is O(1); both trees
+// share nodes until either side writes.
 func (t *treeSet[T]) CloneSorted() SortedSet[T] {
-	out := newTreeSet(t.cmp)
-	t.bt.Scan(func(item T) bool {
-		out.bt.Set(item)
-		return true
-	})
-	return out
+	return &treeSet[T]{bt: t.bt.Copy(), cmp: t.cmp}
 }
 
 // ==========================

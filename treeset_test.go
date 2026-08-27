@@ -605,6 +605,22 @@ func TestTreeSet_AddKeepsEquivalentElement(t *testing.T) {
 	assert.Equal(t, []string{"a"}, cs.ToSlice(), "concurrent set should keep the existing element")
 }
 
+// Rank uses binary search over the B-tree's index access; cover the
+// absent-element and empty-set paths beside the present-element one.
+func TestTreeSet_RankBinarySearch(t *testing.T) {
+	t.Parallel()
+	s := NewTreeSetOrdered[int]()
+	require.Equal(t, -1, s.Rank(1), "Rank on an empty set should be -1")
+
+	s.AddAll(10, 20, 30, 40, 50)
+	for i, v := range []int{10, 20, 30, 40, 50} {
+		require.Equal(t, i, s.Rank(v), "Rank(%d) should be %d", v, i)
+	}
+	require.Equal(t, -1, s.Rank(5), "Rank below the minimum should be -1")
+	require.Equal(t, -1, s.Rank(25), "Rank of an absent middle value should be -1")
+	require.Equal(t, -1, s.Rank(55), "Rank above the maximum should be -1")
+}
+
 // Regression: Intersection and IsDisjoint used to iterate whichever set was
 // smaller, so with sets that disagree on equality the answer flipped when an
 // unrelated element changed the relative sizes. The receiver's elements are

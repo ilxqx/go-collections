@@ -557,3 +557,21 @@ func TestTreeMap_IsNotEmpty(t *testing.T) {
 	m.Put(1, "a")
 	assert.True(t, m.IsNotEmpty(), "map with entry should be non-empty")
 }
+
+// RankOfKey uses binary search over the B-tree's index access; cover the
+// absent-key and empty-map paths beside the present-key one.
+func TestTreeMap_RankOfKeyBinarySearch(t *testing.T) {
+	t.Parallel()
+	m := NewTreeMapOrdered[int, string]()
+	require.Equal(t, -1, m.RankOfKey(1), "RankOfKey on an empty map should be -1")
+
+	for _, k := range []int{10, 20, 30, 40, 50} {
+		m.Put(k, "v")
+	}
+	for i, k := range []int{10, 20, 30, 40, 50} {
+		require.Equal(t, i, m.RankOfKey(k), "RankOfKey(%d) should be %d", k, i)
+	}
+	require.Equal(t, -1, m.RankOfKey(5), "RankOfKey below the minimum should be -1")
+	require.Equal(t, -1, m.RankOfKey(25), "RankOfKey of an absent middle key should be -1")
+	require.Equal(t, -1, m.RankOfKey(55), "RankOfKey above the maximum should be -1")
+}

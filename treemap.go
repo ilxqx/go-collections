@@ -647,20 +647,23 @@ func (t *treeMap[K, V]) TailMap(from K, inclusive bool) SortedMap[K, V] {
 	return out
 }
 
-// RankOfKey returns the 0-based rank of key, or -1 if not present. O(n): the
-// backing B-tree offers no key-to-rank lookup, so this scans.
+// RankOfKey returns the 0-based rank of key, or -1 if not present.
+// O(log² n): binary search over the B-tree's index access.
 func (t *treeMap[K, V]) RankOfKey(key K) int {
-	idx := 0
-	found := -1
-	t.bt.Scan(func(me mapEntry[K, V]) bool {
-		if t.keyCmp(me.key, key) == 0 {
-			found = idx
-			return false
+	lo, hi := 0, t.bt.Len()-1
+	for lo <= hi {
+		mid := int(uint(lo+hi) >> 1)
+		me, _ := t.bt.GetAt(mid)
+		switch c := t.keyCmp(me.key, key); {
+		case c == 0:
+			return mid
+		case c < 0:
+			lo = mid + 1
+		default:
+			hi = mid - 1
 		}
-		idx++
-		return true
-	})
-	return found
+	}
+	return -1
 }
 
 // GetByRank returns the entry at rank.
@@ -673,13 +676,10 @@ func (t *treeMap[K, V]) GetByRank(rank int) (Entry[K, V], bool) {
 }
 
 // CloneSorted returns a shallow copy as SortedMap.
+// The backing B-tree is copied copy-on-write, so this is O(1); both trees
+// share nodes until either side writes.
 func (t *treeMap[K, V]) CloneSorted() SortedMap[K, V] {
-	out := newTreeMap[K, V](t.keyCmp)
-	t.bt.Scan(func(me mapEntry[K, V]) bool {
-		out.bt.Set(me)
-		return true
-	})
-	return out
+	return &treeMap[K, V]{bt: t.bt.Copy(), keyCmp: t.keyCmp, entryLt: t.entryLt}
 }
 
 // ==========================
