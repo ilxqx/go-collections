@@ -245,80 +245,42 @@ func (c *concurrentTreeSet[T]) ContainsAny(elements ...T) bool {
 	return c.tree.ContainsAny(elements...)
 }
 
-// Union returns a new set containing elements from both sets (sorted).
+// snapshot copies the elements into a plain treeSet under the read lock.
+// Set operations consult `other` only after the lock is released: calling
+// other.Contains under the lock deadlocks when other is this very set
+// (recursive RLock blocks once a writer is queued) and can invert lock
+// order against another mutex-guarded set.
+func (c *concurrentTreeSet[T]) snapshot() *treeSet[T] {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	snap := newTreeSet(c.tree.cmp)
+	c.tree.bt.Scan(func(item T) bool { snap.bt.Set(item); return true })
+	return snap
+}
+
+// Union returns a new set containing elements from both sets (sorted, snapshot-based).
 func (c *concurrentTreeSet[T]) Union(other Set[T]) Set[T] {
-	c.mu.RLock()
-	out := newTreeSet(c.tree.cmp)
-	c.tree.bt.Scan(func(item T) bool { out.bt.Set(item); return true })
-	c.mu.RUnlock()
-	for v := range other.Seq() {
-		out.Add(v)
-	}
-	return out
+	return c.snapshot().Union(other)
 }
 
-// Intersection returns a new set with common elements (sorted).
+// Intersection returns a new set with common elements (sorted, snapshot-based).
 func (c *concurrentTreeSet[T]) Intersection(other Set[T]) Set[T] {
-	c.mu.RLock()
-	out := newTreeSet(c.tree.cmp)
-	c.tree.bt.Scan(func(item T) bool {
-		if other.Contains(item) {
-			out.bt.Set(item)
-		}
-		return true
-	})
-	c.mu.RUnlock()
-	return out
+	return c.snapshot().Intersection(other)
 }
 
-// Difference returns a new set with elements in this set but not in other (sorted).
+// Difference returns a new set with elements in this set but not in other (sorted, snapshot-based).
 func (c *concurrentTreeSet[T]) Difference(other Set[T]) Set[T] {
-	c.mu.RLock()
-	out := newTreeSet(c.tree.cmp)
-	c.tree.bt.Scan(func(item T) bool {
-		if !other.Contains(item) {
-			out.bt.Set(item)
-		}
-		return true
-	})
-	c.mu.RUnlock()
-	return out
+	return c.snapshot().Difference(other)
 }
 
-// SymmetricDifference returns a new set with elements in either set but not both (sorted).
+// SymmetricDifference returns a new set with elements in either set but not both (sorted, snapshot-based).
 func (c *concurrentTreeSet[T]) SymmetricDifference(other Set[T]) Set[T] {
-	// First half from c
-	c.mu.RLock()
-	out := newTreeSet(c.tree.cmp)
-	c.tree.bt.Scan(func(item T) bool {
-		if !other.Contains(item) {
-			out.bt.Set(item)
-		}
-		return true
-	})
-	c.mu.RUnlock()
-	// Second half from other
-	for v := range other.Seq() {
-		if !c.Contains(v) {
-			out.Add(v)
-		}
-	}
-	return out
+	return c.snapshot().SymmetricDifference(other)
 }
 
-// IsSubsetOf reports whether all elements of this set are in other.
+// IsSubsetOf reports whether all elements of this set are in other (snapshot-based).
 func (c *concurrentTreeSet[T]) IsSubsetOf(other Set[T]) bool {
-	c.mu.RLock()
-	ok := true
-	c.tree.bt.Scan(func(item T) bool {
-		if !other.Contains(item) {
-			ok = false
-			return false
-		}
-		return true
-	})
-	c.mu.RUnlock()
-	return ok
+	return c.snapshot().IsSubsetOf(other)
 }
 
 // IsSupersetOf reports whether this set contains all elements of other.
@@ -334,29 +296,14 @@ func (c *concurrentTreeSet[T]) IsProperSupersetOf(other Set[T]) bool {
 	return c.Size() > other.Size() && c.IsSupersetOf(other)
 }
 
-// IsDisjoint reports whether this set and other share no common elements.
+// IsDisjoint reports whether this set and other share no common elements (snapshot-based).
 func (c *concurrentTreeSet[T]) IsDisjoint(other Set[T]) bool {
-	disjoint := true
-	c.mu.RLock()
-	c.tree.bt.Scan(func(item T) bool {
-		if other.Contains(item) {
-			disjoint = false
-			return false
-		}
-		return true
-	})
-	c.mu.RUnlock()
-	return disjoint
+	return c.snapshot().IsDisjoint(other)
 }
 
-// Equals reports whether this set and other contain exactly the same elements.
+// Equals reports whether this set and other contain exactly the same elements (snapshot-based).
 func (c *concurrentTreeSet[T]) Equals(other Set[T]) bool {
-	// Snapshot into a TreeSet and compare to avoid holding locks across other.Seq().
-	c.mu.RLock()
-	snap := newTreeSet(c.tree.cmp)
-	c.tree.bt.Scan(func(item T) bool { snap.bt.Set(item); return true })
-	c.mu.RUnlock()
-	return snap.Equals(other)
+	return c.snapshot().Equals(other)
 }
 
 // Clone returns a shallow copy (as Set).

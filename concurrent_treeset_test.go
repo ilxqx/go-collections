@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"testing/synctest"
 
@@ -724,4 +725,41 @@ func TestConcurrentTreeSet_NarrowRangeSeeks(t *testing.T) {
 	s.Range(n-3, n-1, func(int) bool { got++; return true })
 	require.Equal(t, 3, got, "Range should visit the last three elements")
 	require.Less(t, calls, 200, "Range must seek to the pivot, not scan all %d elements", n)
+}
+
+// Regression: the set operations used to call other.Contains while holding
+// the receiver's read lock, so passing the set to itself deadlocked as soon
+// as a writer queued (recursive RLock), taking the writer down with it.
+func TestConcurrentTreeSet_SelfSetOpsWithWriter(t *testing.T) {
+	t.Parallel()
+	s := NewConcurrentTreeSetOrdered[int]()
+	s.AddAll(1, 2, 3, 4, 5, 6, 7, 8)
+
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for i := range 2000 {
+			s.Add(100 + i%3)
+			s.Remove(100 + i%3)
+		}
+	})
+	wg.Go(func() {
+		// The receiver doubling as the argument is the point of the test.
+		self := Set[int](s)
+		for range 500 {
+			s.Intersection(self)
+			s.Difference(self)
+			s.SymmetricDifference(self)
+			s.IsSubsetOf(self)
+			s.IsDisjoint(self)
+			s.Union(self)
+			s.Equals(self)
+		}
+	})
+	wg.Wait()
+
+	inter := s.Intersection(s)
+	require.True(t, inter.Contains(1), "self-intersection must contain the set's elements")
+	require.True(t, s.IsSubsetOf(s), "a set is a subset of itself")
+	require.False(t, s.IsDisjoint(s), "a non-empty set is not disjoint from itself")
+	require.True(t, s.Difference(s).IsEmpty(), "self-difference must be empty")
 }
