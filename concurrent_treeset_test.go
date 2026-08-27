@@ -791,15 +791,18 @@ func TestConcurrentTreeSet_SetOpSnapshotIsCheap(t *testing.T) {
 	require.Less(t, calls, 100, "Filter must snapshot copy-on-write, not rebuild the tree")
 }
 
-// gateSet wraps a concurrent set and, on the first Contains call, starts a
-// writer on it and waits until that writer has either finished (the set
-// operation holds no lock at this point — the fixed behavior) or provably
-// queued on the set's lock (the old implementation reached this hook while
-// holding the read lock, which a probe reader then blocks behind). Only then
-// does it delegate, turning the old implementation's recursive read lock
-// into a guaranteed deadlock instead of a scheduling coincidence.
+// gateSet wraps a concurrent tree set and, on the first Contains call,
+// starts a writer on it and waits until that writer has either finished (the
+// set operation holds no lock at this point — the fixed behavior) or is
+// pending on the set's lock, observed directly via TryRLock: the old
+// implementation reached this hook while the operation's goroutine held the
+// read lock, so a writer could never be active and a failed TryRLock could
+// only mean one was queued. Only then does it delegate, turning the old
+// implementation's recursive read lock into a guaranteed deadlock instead of
+// a scheduling coincidence.
 type gateSet struct {
 	Set[int]
+	cs         *concurrentTreeSet[int]
 	once       sync.Once
 	writerDone chan struct{}
 }
@@ -816,14 +819,11 @@ func (g *gateSet) Contains(e int) bool {
 				return
 			default:
 			}
-			probed := make(chan struct{})
-			go func() { g.Size(); close(probed) }()
-			select {
-			case <-probed:
-				runtime.Gosched()
-			case <-time.After(100 * time.Millisecond):
-				return // the writer is queued behind the lock we would need
+			if !g.cs.mu.TryRLock() {
+				return // a writer holds or awaits the lock Contains would need
 			}
+			g.cs.mu.RUnlock()
+			runtime.Gosched()
 		}
 	})
 	return g.Set.Contains(e)
@@ -832,14 +832,14 @@ func (g *gateSet) Contains(e int) bool {
 // Regression: the set operations used to call other.Contains while holding
 // the receiver's read lock. The stress test above relies on a scheduling
 // coincidence and can pass against the broken implementation; this test pins
-// the interleaving — a writer is provably queued on the lock before Contains
-// touches the set again — which made the old implementation deadlock every
-// time.
+// the interleaving — TryRLock proves a writer is pending on the lock before
+// Contains touches the set again — which made the old implementation
+// deadlock every time. The deadline below is only the failure condition.
 func TestConcurrentTreeSet_SetOpWithQueuedWriter(t *testing.T) {
 	t.Parallel()
 	s := NewConcurrentTreeSetOrdered[int]()
 	s.AddAll(1, 2, 3)
-	gate := &gateSet{Set: s, writerDone: make(chan struct{})}
+	gate := &gateSet{Set: s, cs: s.(*concurrentTreeSet[int]), writerDone: make(chan struct{})}
 
 	result := make(chan Set[int], 1)
 	go func() { result <- s.Intersection(gate) }()
