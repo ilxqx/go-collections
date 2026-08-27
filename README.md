@@ -521,7 +521,7 @@ higher, _ := m.HigherKey(2)    // 3
 
 Thread-safe hash map backed by `xsync.MapOf`.
 
-**Callback Note:** The compute-family callbacks (`GetOrCompute`, `Compute`, `ComputeIfAbsent`, `ComputeIfPresent`, `Merge`) run while an internal bucket lock is held: they must not call back into the same map, and should be short. A panic inside a callback is propagated after the lock is released and leaves the map unchanged and usable.
+**Callback Note:** Every user callback — the compute family (`GetOrCompute`, `Compute`, `ComputeIfAbsent`, `ComputeIfPresent`, `Merge`) as well as the `Equaler`/function of `RemoveIf`, `ReplaceIf`, `ReplaceAll`, `CompareAndSwap` and `CompareAndDelete` — runs while an internal bucket lock is held: it must not call back into the same map, and should be short. A panic inside any of these callbacks is propagated after the lock is released and leaves the map unchanged and usable.
 
 **Constructors:**
 

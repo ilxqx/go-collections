@@ -120,6 +120,14 @@ linters:
         linters: [revive]
         text: "unchecked-type-assertion"
 
+      # computeAbort exists to be deferred: it is the shared recover handler
+      # for every user callback handed to xsync's Compute, and its only call
+      # sites are defer statements — which the rule cannot see across the
+      # function boundary.
+      - path: 'concurrent_hashmap\.go'
+        linters: [revive]
+        text: "recover must be called inside a deferred function"
+
       # A coverage-style test exercises every method of one container in one
       # function, so its length tracks the size of the contract rather than
       # any tangle in the test.

@@ -592,6 +592,21 @@ func TestConcurrentHashMap_CallbackPanicLeavesMapUsable(t *testing.T) {
 	require.PanicsWithValue(t, "boom", func() {
 		m.Merge(1, 5, func(int, int) (int, bool) { panic("boom") })
 	}, "Merge must propagate the callback panic")
+	require.PanicsWithValue(t, "boom", func() {
+		m.RemoveIf(1, 10, func(int, int) bool { panic("boom") })
+	}, "RemoveIf must propagate the eq panic")
+	require.PanicsWithValue(t, "boom", func() {
+		m.ReplaceIf(1, 10, 11, func(int, int) bool { panic("boom") })
+	}, "ReplaceIf must propagate the eq panic")
+	require.PanicsWithValue(t, "boom", func() {
+		m.ReplaceAll(func(int, int) int { panic("boom") })
+	}, "ReplaceAll must propagate the function panic")
+	require.PanicsWithValue(t, "boom", func() {
+		m.CompareAndSwap(1, 10, 11, func(int, int) bool { panic("boom") })
+	}, "CompareAndSwap must propagate the eq panic")
+	require.PanicsWithValue(t, "boom", func() {
+		m.CompareAndDelete(1, 10, func(int, int) bool { panic("boom") })
+	}, "CompareAndDelete must propagate the eq panic")
 
 	v, ok := m.Get(1)
 	require.True(t, ok, "existing entries must survive callback panics")
