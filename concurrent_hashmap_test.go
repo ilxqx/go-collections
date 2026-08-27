@@ -546,3 +546,23 @@ func TestConcurrentHashMap_IsNotEmpty(t *testing.T) {
 	m.Put("a", 1)
 	assert.True(t, m.IsNotEmpty(), "map with entry should be non-empty")
 }
+
+// Regression: the Compute-based helpers answered del=false for an absent
+// key, which the backing map treats as an insert — a zero value appeared
+// for keys that ComputeIfPresent, RemoveIf, Replace, ReplaceIf,
+// CompareAndSwap and CompareAndDelete never stored.
+func TestConcurrentHashMap_AbsentKeyHelpersInsertNothing(t *testing.T) {
+	t.Parallel()
+	eq := func(a, b int) bool { return a == b }
+
+	m := NewConcurrentHashMap[string, int]()
+	_, ok := m.ComputeIfPresent("a", func(_ string, old int) (int, bool) { return old + 1, true })
+	require.False(t, ok, "ComputeIfPresent on an absent key must report false")
+	require.False(t, m.RemoveIf("b", 1, eq), "RemoveIf on an absent key must report false")
+	_, ok = m.Replace("c", 5)
+	require.False(t, ok, "Replace on an absent key must report false")
+	require.False(t, m.ReplaceIf("d", 1, 2, eq), "ReplaceIf on an absent key must report false")
+	require.False(t, m.CompareAndSwap("e", 1, 2, eq), "CompareAndSwap on an absent key must report false")
+	require.False(t, m.CompareAndDelete("f", 1, eq), "CompareAndDelete on an absent key must report false")
+	require.Equal(t, 0, m.Size(), "no helper may create the key it failed to find")
+}

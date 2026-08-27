@@ -111,7 +111,12 @@ func (m *concurrentHashMap[K, V]) Remove(key K) (V, bool) {
 func (m *concurrentHashMap[K, V]) RemoveIf(key K, value V, eq Equaler[V]) bool {
 	var removed bool
 	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
-		if loaded && eq(prev, value) {
+		// Deleting an absent key is a no-op; returning del=false would
+		// insert prev (a zero value) for the key.
+		if !loaded {
+			return prev, true
+		}
+		if eq(prev, value) {
 			removed = true
 			var zero V
 			return zero, true // delete
@@ -216,7 +221,9 @@ func (m *concurrentHashMap[K, V]) ComputeIfPresent(key K, remapping func(key K, 
 	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
 		if !loaded {
 			ok = false
-			return prev, false
+			// Deleting an absent key is a no-op; returning del=false would
+			// insert prev (a zero value) for the key.
+			return prev, true
 		}
 		newVal, keep := remapping(key, prev)
 		if !keep {
@@ -265,12 +272,14 @@ func (m *concurrentHashMap[K, V]) Replace(key K, value V) (V, bool) {
 		replaced bool
 	)
 	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
-		if loaded {
-			old = prev
-			replaced = true
-			return value, false
+		// Deleting an absent key is a no-op; returning del=false would
+		// insert prev (a zero value) for the key.
+		if !loaded {
+			return prev, true
 		}
-		return prev, false
+		old = prev
+		replaced = true
+		return value, false
 	})
 	return old, replaced
 }
@@ -279,7 +288,12 @@ func (m *concurrentHashMap[K, V]) Replace(key K, value V) (V, bool) {
 func (m *concurrentHashMap[K, V]) ReplaceIf(key K, oldValue, newValue V, eq Equaler[V]) bool {
 	var ok bool
 	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
-		if loaded && eq(prev, oldValue) {
+		// Deleting an absent key is a no-op; returning del=false would
+		// insert prev (a zero value) for the key.
+		if !loaded {
+			return prev, true
+		}
+		if eq(prev, oldValue) {
 			ok = true
 			return newValue, false
 		}
@@ -292,8 +306,10 @@ func (m *concurrentHashMap[K, V]) ReplaceIf(key K, oldValue, newValue V, eq Equa
 func (m *concurrentHashMap[K, V]) ReplaceAll(function func(key K, value V) V) {
 	m.m.Range(func(k K, _ V) bool {
 		m.m.Compute(k, func(prev V, loaded bool) (V, bool) {
+			// The key can vanish between Range and Compute; deleting an
+			// absent key is a no-op, del=false would insert a zero value.
 			if !loaded {
-				return prev, false
+				return prev, true
 			}
 			return function(k, prev), false
 		})
@@ -414,7 +430,12 @@ func (m *concurrentHashMap[K, V]) RemoveAndGet(key K) (V, bool) {
 func (m *concurrentHashMap[K, V]) CompareAndSwap(key K, oldValue, newValue V, eq Equaler[V]) bool {
 	var swapped bool
 	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
-		if loaded && eq(prev, oldValue) {
+		// Deleting an absent key is a no-op; returning del=false would
+		// insert prev (a zero value) for the key.
+		if !loaded {
+			return prev, true
+		}
+		if eq(prev, oldValue) {
 			swapped = true
 			return newValue, false
 		}
@@ -427,7 +448,12 @@ func (m *concurrentHashMap[K, V]) CompareAndSwap(key K, oldValue, newValue V, eq
 func (m *concurrentHashMap[K, V]) CompareAndDelete(key K, value V, eq Equaler[V]) bool {
 	var deleted bool
 	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
-		if loaded && eq(prev, value) {
+		// Deleting an absent key is a no-op; returning del=false would
+		// insert prev (a zero value) for the key.
+		if !loaded {
+			return prev, true
+		}
+		if eq(prev, value) {
 			deleted = true
 			var zero V
 			return zero, true
