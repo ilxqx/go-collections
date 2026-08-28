@@ -182,7 +182,7 @@ func (c *concurrentSkipSet[T]) ContainsAny(elements ...T) bool {
 
 // Union returns a new HashSet snapshot of c ∪ other (unordered result).
 func (c *concurrentSkipSet[T]) Union(other Set[T]) Set[T] {
-	out := NewHashSet[T]()
+	out := NewHashSetWithCapacity[T](c.Size() + other.Size())
 	c.s.Range(func(v T) bool { out.Add(v); return true })
 	for v := range other.Seq() {
 		out.Add(v)
@@ -192,7 +192,8 @@ func (c *concurrentSkipSet[T]) Union(other Set[T]) Set[T] {
 
 // Intersection returns a new HashSet snapshot of c ∩ other.
 func (c *concurrentSkipSet[T]) Intersection(other Set[T]) Set[T] {
-	out := NewHashSet[T]()
+	// Preallocate up to the size of the smaller set.
+	out := NewHashSetWithCapacity[T](min(c.Size(), other.Size()))
 	c.s.Range(func(v T) bool {
 		if other.Contains(v) {
 			out.Add(v)
@@ -204,7 +205,7 @@ func (c *concurrentSkipSet[T]) Intersection(other Set[T]) Set[T] {
 
 // Difference returns a new HashSet snapshot of c - other.
 func (c *concurrentSkipSet[T]) Difference(other Set[T]) Set[T] {
-	out := NewHashSet[T]()
+	out := NewHashSetWithCapacity[T](c.Size())
 	c.s.Range(func(v T) bool {
 		if !other.Contains(v) {
 			out.Add(v)
@@ -216,7 +217,8 @@ func (c *concurrentSkipSet[T]) Difference(other Set[T]) Set[T] {
 
 // SymmetricDifference returns a new HashSet snapshot of (c - other) ∪ (other - c).
 func (c *concurrentSkipSet[T]) SymmetricDifference(other Set[T]) Set[T] {
-	out := NewHashSet[T]()
+	// Preallocate up to sum of sizes as an upper bound.
+	out := NewHashSetWithCapacity[T](c.Size() + other.Size())
 	c.s.Range(func(v T) bool {
 		if !other.Contains(v) {
 			out.Add(v)
@@ -270,12 +272,21 @@ func (c *concurrentSkipSet[T]) IsDisjoint(other Set[T]) bool {
 	return disjoint
 }
 
-// Equals reports whether c and other contain exactly the same elements.
+// Equals reports whether c and other contain exactly the same elements
+// (best-effort under concurrent modification).
 func (c *concurrentSkipSet[T]) Equals(other Set[T]) bool {
-	// Snapshot this into a HashSet and compare.
-	snap := NewHashSet[T]()
-	c.s.Range(func(v T) bool { snap.Add(v); return true })
-	return snap.Equals(other)
+	if c.Size() != other.Size() {
+		return false
+	}
+	equal := true
+	c.s.Range(func(v T) bool {
+		if !other.Contains(v) {
+			equal = false
+			return false
+		}
+		return true
+	})
+	return equal
 }
 
 // Clone returns a shallow copy (as Set).

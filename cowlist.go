@@ -373,13 +373,16 @@ func (l *cowList[T]) Clone() List[T] {
 
 // Filter returns a new list of elements satisfying predicate.
 func (l *cowList[T]) Filter(predicate func(element T) bool) List[T] {
-	var result []T
-	for _, v := range l.snapshot() {
+	snap := l.snapshot()
+	result := make([]T, 0, len(snap))
+	for _, v := range snap {
 		if predicate(v) {
 			result = append(result, v)
 		}
 	}
-	return NewCOWListFrom(result...)
+	out := &cowList[T]{}
+	out.data.Store(&result)
+	return out
 }
 
 // Sort sorts elements in place.

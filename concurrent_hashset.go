@@ -208,7 +208,7 @@ func (s *concurrentHashSet[T]) ContainsAny(elements ...T) bool {
 
 // Union returns a new HashSet as snapshot of s ∪ other.
 func (s *concurrentHashSet[T]) Union(other Set[T]) Set[T] {
-	out := NewHashSet[T]()
+	out := NewHashSetWithCapacity[T](s.Size() + other.Size())
 	s.m.Range(func(k T, _ struct{}) bool {
 		out.Add(k)
 		return true
@@ -221,7 +221,8 @@ func (s *concurrentHashSet[T]) Union(other Set[T]) Set[T] {
 
 // Intersection returns a new HashSet snapshot of s ∩ other.
 func (s *concurrentHashSet[T]) Intersection(other Set[T]) Set[T] {
-	out := NewHashSet[T]()
+	// Preallocate up to the size of the smaller set.
+	out := NewHashSetWithCapacity[T](min(s.Size(), other.Size()))
 	s.m.Range(func(k T, _ struct{}) bool {
 		if other.Contains(k) {
 			out.Add(k)
@@ -233,7 +234,7 @@ func (s *concurrentHashSet[T]) Intersection(other Set[T]) Set[T] {
 
 // Difference returns a new HashSet snapshot of s - other.
 func (s *concurrentHashSet[T]) Difference(other Set[T]) Set[T] {
-	out := NewHashSet[T]()
+	out := NewHashSetWithCapacity[T](s.Size())
 	s.m.Range(func(k T, _ struct{}) bool {
 		if !other.Contains(k) {
 			out.Add(k)
@@ -245,7 +246,8 @@ func (s *concurrentHashSet[T]) Difference(other Set[T]) Set[T] {
 
 // SymmetricDifference returns a new HashSet snapshot of (s - other) ∪ (other - s).
 func (s *concurrentHashSet[T]) SymmetricDifference(other Set[T]) Set[T] {
-	out := NewHashSet[T]()
+	// Preallocate up to sum of sizes as an upper bound.
+	out := NewHashSetWithCapacity[T](s.Size() + other.Size())
 	s.m.Range(func(k T, _ struct{}) bool {
 		if !other.Contains(k) {
 			out.Add(k)
@@ -301,20 +303,26 @@ func (s *concurrentHashSet[T]) IsDisjoint(other Set[T]) bool {
 	return disjoint
 }
 
-// Equals reports whether s and other contain exactly the same elements.
+// Equals reports whether s and other contain exactly the same elements
+// (best-effort under concurrent modification).
 func (s *concurrentHashSet[T]) Equals(other Set[T]) bool {
-	// Snapshot s into HashSet and compare with other to avoid approximate size.
-	snap := NewHashSet[T]()
+	if s.Size() != other.Size() {
+		return false
+	}
+	equal := true
 	s.m.Range(func(k T, _ struct{}) bool {
-		snap.Add(k)
+		if !other.Contains(k) {
+			equal = false
+			return false
+		}
 		return true
 	})
-	return snap.Equals(other)
+	return equal
 }
 
 // Clone returns a shallow copy as HashSet snapshot.
 func (s *concurrentHashSet[T]) Clone() Set[T] {
-	out := NewHashSet[T]()
+	out := NewHashSetWithCapacity[T](s.Size())
 	s.m.Range(func(k T, _ struct{}) bool {
 		out.Add(k)
 		return true
@@ -324,7 +332,7 @@ func (s *concurrentHashSet[T]) Clone() Set[T] {
 
 // Filter returns a new HashSet containing elements that satisfy predicate.
 func (s *concurrentHashSet[T]) Filter(predicate func(element T) bool) Set[T] {
-	out := NewHashSet[T]()
+	out := NewHashSetWithCapacity[T](s.Size() / 2)
 	s.m.Range(func(k T, _ struct{}) bool {
 		if predicate(k) {
 			out.Add(k)

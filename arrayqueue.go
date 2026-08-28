@@ -147,7 +147,8 @@ func (q *arrayQueue[T]) compact() {
 // MarshalJSON implements json.Marshaler.
 // Serializes from front to back as a JSON array.
 func (q *arrayQueue[T]) MarshalJSON() ([]byte, error) {
-	return json.Marshal(q.ToSlice())
+	// Encoders do not retain the slice, so no defensive copy is needed.
+	return json.Marshal(q.data[q.head:])
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -165,7 +166,7 @@ func (q *arrayQueue[T]) UnmarshalJSON(data []byte) error {
 // MarshalJSONTo implements jsonv2.MarshalerTo.
 // Streams the same JSON as MarshalJSON into enc.
 func (q *arrayQueue[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
-	return jsonv2.MarshalEncode(enc, q.ToSlice())
+	return jsonv2.MarshalEncode(enc, q.data[q.head:])
 }
 
 // UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
@@ -184,7 +185,7 @@ func (q *arrayQueue[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 func (q *arrayQueue[T]) GobEncode() ([]byte, error) {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
-	if err := enc.Encode(q.ToSlice()); err != nil {
+	if err := enc.Encode(q.data[q.head:]); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil

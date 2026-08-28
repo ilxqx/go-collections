@@ -340,7 +340,7 @@ func (c *concurrentSkipMap[K, V]) Clone() Map[K, V] {
 
 // Filter returns a new map with entries satisfying predicate (non-concurrent snapshot).
 func (c *concurrentSkipMap[K, V]) Filter(predicate func(key K, value V) bool) Map[K, V] {
-	out := NewHashMap[K, V]()
+	out := NewHashMapWithCapacity[K, V](c.Size() / 2)
 	c.m.Range(func(k K, v V) bool {
 		if predicate(k, v) {
 			out.Put(k, v)
@@ -350,11 +350,22 @@ func (c *concurrentSkipMap[K, V]) Filter(predicate func(key K, value V) bool) Ma
 	return out
 }
 
-// Equals reports whether both maps contain the same entries (snapshot-based).
+// Equals reports whether both maps contain the same entries (best-effort
+// under concurrent modification).
 func (c *concurrentSkipMap[K, V]) Equals(other Map[K, V], valueEq Equaler[V]) bool {
-	snap := NewHashMap[K, V]()
-	c.m.Range(func(k K, v V) bool { snap.Put(k, v); return true })
-	return snap.Equals(other, valueEq)
+	if c.Size() != other.Size() {
+		return false
+	}
+	equal := true
+	c.m.Range(func(k K, v V) bool {
+		ov, ok := other.Get(k)
+		if !ok || !valueEq(v, ov) {
+			equal = false
+			return false
+		}
+		return true
+	})
+	return equal
 }
 
 // GetOrCompute returns the value for key, computing and storing one if absent.

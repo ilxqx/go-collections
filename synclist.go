@@ -314,11 +314,12 @@ func (l *syncList[T]) FindIndex(predicate func(element T) bool) int {
 
 // SubList returns a new list containing elements in [from, to).
 func (l *syncList[T]) SubList(from, to int) List[T] {
-	snap := l.ToSlice()
-	if from < 0 || to > len(snap) || from > to {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	if from < 0 || to > len(l.data) || from > to {
 		return NewSyncList[T]()
 	}
-	return NewSyncListFrom(snap[from:to]...)
+	return &syncList[T]{data: slices.Clone(l.data[from:to])}
 }
 
 // Reversed returns a sequence iterating in reverse order.
@@ -335,18 +336,19 @@ func (l *syncList[T]) Reversed() iter.Seq[T] {
 
 // Clone returns a shallow copy.
 func (l *syncList[T]) Clone() List[T] {
-	return NewSyncListFrom(l.ToSlice()...)
+	return &syncList[T]{data: l.ToSlice()}
 }
 
 // Filter returns a new list of elements satisfying predicate.
 func (l *syncList[T]) Filter(predicate func(element T) bool) List[T] {
-	var result []T
-	for _, v := range l.ToSlice() {
+	snap := l.ToSlice()
+	result := make([]T, 0, len(snap))
+	for _, v := range snap {
 		if predicate(v) {
 			result = append(result, v)
 		}
 	}
-	return NewSyncListFrom(result...)
+	return &syncList[T]{data: result}
 }
 
 // Sort sorts all elements in place.

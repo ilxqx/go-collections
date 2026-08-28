@@ -36,10 +36,8 @@ func NewConcurrentTreeMapOrdered[K Ordered, V any]() ConcurrentSortedMap[K, V] {
 // NewConcurrentTreeMapFrom creates a map populated from a standard Go map.
 func NewConcurrentTreeMapFrom[K comparable, V any](cmpK Comparator[K], m map[K]V) ConcurrentSortedMap[K, V] {
 	ct := &concurrentTreeMap[K, V]{tm: newTreeMap[K, V](cmpK)}
-	ct.mu.Lock()
-	defer ct.mu.Unlock()
 	for k, v := range m {
-		ct.tm.bt.Set(mapEntry[K, V]{key: k, value: v})
+		ct.tm.Put(k, v)
 	}
 	return ct
 }
@@ -97,7 +95,7 @@ func (c *concurrentTreeMap[K, V]) PutAll(other Map[K, V]) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, e := range buf {
-		c.tm.bt.Set(mapEntry[K, V]{key: e.Key, value: e.Value})
+		c.tm.Put(e.Key, e.Value)
 	}
 }
 
@@ -108,16 +106,19 @@ func (c *concurrentTreeMap[K, V]) PutSeq(seq iter.Seq2[K, V]) int {
 		buf = append(buf, Entry[K, V]{Key: k, Value: v})
 		return true
 	})
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	// The unique-key count depends only on the buffered sequence, so run the
+	// comparator-heavy dedupe before taking the write lock.
 	seen := newTreeSet(c.tm.keyCmp)
 	changed := 0
 	for _, e := range buf {
-		if !seen.Contains(e.Key) {
-			seen.Add(e.Key)
+		if seen.Add(e.Key) {
 			changed++
 		}
-		c.tm.bt.Set(mapEntry[K, V]{key: e.Key, value: e.Value})
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, e := range buf {
+		c.tm.Put(e.Key, e.Value)
 	}
 	return changed
 }
@@ -177,29 +178,11 @@ func (c *concurrentTreeMap[K, V]) RemoveAll(keys ...K) int {
 
 // RemoveSeq removes keys from the sequence. Returns count removed.
 func (c *concurrentTreeMap[K, V]) RemoveSeq(seq iter.Seq[K]) int {
-	var (
-		keys []K
-		size int
-	)
-	c.mu.RLock()
-	size = c.tm.Size()
-	c.mu.RUnlock()
-	if size == 0 {
-		return 0
-	}
-	keys = make([]K, 0, min(size, 16))
+	keys := make([]K, 0, 16)
 	for k := range seq {
 		keys = append(keys, k)
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	removed := 0
-	for _, k := range keys {
-		if _, ok := c.tm.Remove(k); ok {
-			removed++
-		}
-	}
-	return removed
+	return c.RemoveAll(keys...)
 }
 
 // RemoveFunc removes entries where predicate returns true. Returns count removed.

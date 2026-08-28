@@ -556,7 +556,7 @@ func (m *concurrentHashMap[K, V]) Clone() Map[K, V] {
 
 // Filter returns a new map with entries satisfying predicate (non-concurrent snapshot).
 func (m *concurrentHashMap[K, V]) Filter(predicate func(key K, value V) bool) Map[K, V] {
-	out := NewHashMap[K, V]()
+	out := NewHashMapWithCapacity[K, V](m.Size() / 2)
 	m.m.Range(func(k K, v V) bool {
 		if predicate(k, v) {
 			out.Put(k, v)
@@ -566,15 +566,22 @@ func (m *concurrentHashMap[K, V]) Filter(predicate func(key K, value V) bool) Ma
 	return out
 }
 
-// Equals reports whether both maps contain the same entries (snapshot-based).
+// Equals reports whether both maps contain the same entries (best-effort
+// under concurrent modification).
 func (m *concurrentHashMap[K, V]) Equals(other Map[K, V], valueEq Equaler[V]) bool {
-	// Snapshot this map and compare to other.
-	snap := NewHashMap[K, V]()
+	if m.Size() != other.Size() {
+		return false
+	}
+	equal := true
 	m.m.Range(func(k K, v V) bool {
-		snap.Put(k, v)
+		ov, ok := other.Get(k)
+		if !ok || !valueEq(v, ov) {
+			equal = false
+			return false
+		}
 		return true
 	})
-	return snap.Equals(other, valueEq)
+	return equal
 }
 
 // GetOrCompute atomically returns existing value or computes and stores a new one.
