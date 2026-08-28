@@ -597,32 +597,7 @@ func (m *concurrentHashMap[K, V]) RemoveAndGet(key K) (V, bool) {
 // call back into the same map. A panic in eq is propagated after the lock
 // is released and leaves the map unchanged.
 func (m *concurrentHashMap[K, V]) CompareAndSwap(key K, oldValue, newValue V, eq Equaler[V]) bool {
-	var (
-		swapped  bool
-		panicked bool
-		panicVal any
-	)
-	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
-		// Deleting an absent key is a no-op; returning del=false would
-		// insert prev (a zero value) for the key.
-		if !loaded {
-			return prev, true
-		}
-		var match bool
-		runGuarded(&panicked, &panicVal, func() { match = eq(prev, oldValue) })
-		if panicked {
-			return prev, false // keep the old value: the map stays unchanged
-		}
-		if match {
-			swapped = true
-			return newValue, false
-		}
-		return prev, false
-	})
-	if panicked {
-		panic(panicVal)
-	}
-	return swapped
+	return m.ReplaceIf(key, oldValue, newValue, eq)
 }
 
 // CompareAndDelete atomically deletes entry if current value equals provided.
@@ -630,33 +605,7 @@ func (m *concurrentHashMap[K, V]) CompareAndSwap(key K, oldValue, newValue V, eq
 // call back into the same map. A panic in eq is propagated after the lock
 // is released and leaves the map unchanged.
 func (m *concurrentHashMap[K, V]) CompareAndDelete(key K, value V, eq Equaler[V]) bool {
-	var (
-		deleted  bool
-		panicked bool
-		panicVal any
-	)
-	m.m.Compute(key, func(prev V, loaded bool) (V, bool) {
-		// Deleting an absent key is a no-op; returning del=false would
-		// insert prev (a zero value) for the key.
-		if !loaded {
-			return prev, true
-		}
-		var match bool
-		runGuarded(&panicked, &panicVal, func() { match = eq(prev, value) })
-		if panicked {
-			return prev, false // keep the old value: the map stays unchanged
-		}
-		if match {
-			deleted = true
-			var zero V
-			return zero, true
-		}
-		return prev, false
-	})
-	if panicked {
-		panic(panicVal)
-	}
-	return deleted
+	return m.RemoveIf(key, value, eq)
 }
 
 // ==========================

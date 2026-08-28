@@ -202,19 +202,7 @@ func (l *arrayList[T]) RemoveFunc(predicate func(element T) bool) int {
 
 // RetainFunc keeps only elements satisfying predicate. Returns count removed.
 func (l *arrayList[T]) RetainFunc(predicate func(element T) bool) int {
-	oldLen := len(l.data)
-	j := 0
-	for _, v := range l.data {
-		if !predicate(v) {
-			continue
-		}
-		l.data[j] = v
-		j++
-	}
-	// Clear the now-dead tail to avoid holding references.
-	clear(l.data[j:oldLen])
-	l.data = l.data[:j]
-	return oldLen - j
+	return l.RemoveFunc(func(element T) bool { return !predicate(element) })
 }
 
 // IndexOf returns the index of the first occurrence, or -1.

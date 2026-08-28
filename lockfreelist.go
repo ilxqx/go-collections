@@ -464,15 +464,7 @@ func (l *lockFreeList[T]) RemoveFunc(predicate func(element T) bool) int {
 
 // RetainFunc keeps only elements satisfying predicate.
 func (l *lockFreeList[T]) RetainFunc(predicate func(element T) bool) int {
-	removed := 0
-	for curr := l.head.next.Load(); curr != nil && curr != l.tail; curr = curr.next.Load() {
-		if v := curr.state.Load(); v != nil && !predicate(*v) {
-			if curr.state.CompareAndSwap(v, nil) {
-				removed++
-			}
-		}
-	}
-	return removed
+	return l.RemoveFunc(func(element T) bool { return !predicate(element) })
 }
 
 // IndexOf returns the index of the first occurrence.

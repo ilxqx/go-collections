@@ -157,14 +157,7 @@ func (s *hashSet[T]) RemoveFunc(predicate func(element T) bool) int {
 
 // RetainFunc keeps only elements satisfying predicate. Returns count removed.
 func (s *hashSet[T]) RetainFunc(predicate func(element T) bool) int {
-	removed := 0
-	for v := range s.m {
-		if !predicate(v) {
-			delete(s.m, v)
-			removed++
-		}
-	}
-	return removed
+	return s.RemoveFunc(func(element T) bool { return !predicate(element) })
 }
 
 // Pop removes and returns an arbitrary element. Returns (zero, false) if empty.

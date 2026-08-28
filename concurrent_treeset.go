@@ -122,18 +122,7 @@ func (c *concurrentTreeSet[T]) AddSeq(seq iter.Seq[T]) int {
 	for v := range seq {
 		buf = append(buf, v)
 	}
-	if len(buf) == 0 {
-		return 0
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	added := 0
-	for _, v := range buf {
-		if c.tree.Add(v) {
-			added++
-		}
-	}
-	return added
+	return c.AddAll(buf...)
 }
 
 // Remove deletes the element if present. Returns true if removed.
@@ -156,18 +145,7 @@ func (c *concurrentTreeSet[T]) RemoveSeq(seq iter.Seq[T]) int {
 	for v := range seq {
 		buf = append(buf, v)
 	}
-	if len(buf) == 0 {
-		return 0
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	removed := 0
-	for _, v := range buf {
-		if c.tree.Remove(v) {
-			removed++
-		}
-	}
-	return removed
+	return c.RemoveAll(buf...)
 }
 
 // RemoveFunc removes elements satisfying predicate. Returns count removed.
@@ -199,28 +177,7 @@ func (c *concurrentTreeSet[T]) RemoveFunc(predicate func(element T) bool) int {
 
 // RetainFunc keeps only elements satisfying predicate. Returns count removed.
 func (c *concurrentTreeSet[T]) RetainFunc(predicate func(element T) bool) int {
-	c.mu.RLock()
-	snap := c.tree.ToSlice()
-	c.mu.RUnlock()
-	size := len(snap)
-	if size == 0 {
-		return 0
-	}
-	dels := make([]T, 0, size/2)
-	for _, v := range snap {
-		if !predicate(v) {
-			dels = append(dels, v)
-		}
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	removed := 0
-	for _, v := range dels {
-		if c.tree.Remove(v) {
-			removed++
-		}
-	}
-	return removed
+	return c.RemoveFunc(func(element T) bool { return !predicate(element) })
 }
 
 // Pop removes and returns the smallest element.

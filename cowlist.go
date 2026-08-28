@@ -170,17 +170,7 @@ func (l *cowList[T]) AddSeq(seq iter.Seq[T]) {
 	for v := range seq {
 		buf = append(buf, v)
 	}
-	if len(buf) == 0 {
-		return
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	snap := l.snapshot()
-	newData := make([]T, len(snap)+len(buf))
-	copy(newData, snap)
-	copy(newData[len(snap):], buf)
-	l.data.Store(&newData)
+	l.AddAll(buf...)
 }
 
 // Insert inserts the element at index.
@@ -305,24 +295,7 @@ func (l *cowList[T]) RemoveFunc(predicate func(element T) bool) int {
 
 // RetainFunc keeps only elements satisfying predicate.
 func (l *cowList[T]) RetainFunc(predicate func(element T) bool) int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	snap := l.snapshot()
-	newData := make([]T, 0, len(snap))
-	removed := 0
-	for _, v := range snap {
-		if predicate(v) {
-			newData = append(newData, v)
-		} else {
-			removed++
-		}
-	}
-	if removed > 0 {
-		newData = slices.Clip(newData)
-		l.data.Store(&newData)
-	}
-	return removed
+	return l.RemoveFunc(func(element T) bool { return !predicate(element) })
 }
 
 // IndexOf returns the index of the first occurrence.

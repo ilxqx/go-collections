@@ -377,19 +377,12 @@ func (c *concurrentSkipMap[K, V]) RemoveAndGet(key K) (V, bool) { return c.m.Loa
 
 // CompareAndSwap replaces value if current equals old (best-effort, not atomic).
 func (c *concurrentSkipMap[K, V]) CompareAndSwap(key K, oldValue, newValue V, eq Equaler[V]) bool {
-	if cur, ok := c.m.Load(key); ok && eq(cur, oldValue) {
-		c.m.Store(key, newValue)
-		return true
-	}
-	return false
+	return c.ReplaceIf(key, oldValue, newValue, eq)
 }
 
 // CompareAndDelete deletes entry if current value equals provided (best-effort, not atomic).
 func (c *concurrentSkipMap[K, V]) CompareAndDelete(key K, value V, eq Equaler[V]) bool {
-	if cur, ok := c.m.Load(key); ok && eq(cur, value) {
-		return c.m.Delete(key)
-	}
-	return false
+	return c.RemoveIf(key, value, eq)
 }
 
 // --- SortedMap extras ---
@@ -667,14 +660,7 @@ func (c *concurrentSkipMap[K, V]) DescendFrom(pivot K, action func(key K, value 
 
 // Reversed returns a sequence iterating in descending key order (snapshot-based).
 func (c *concurrentSkipMap[K, V]) Reversed() iter.Seq2[K, V] {
-	return func(yield func(K, V) bool) {
-		ents := c.Entries()
-		for _, e := range slices.Backward(ents) {
-			if !yield(e.Key, e.Value) {
-				return
-			}
-		}
-	}
+	return func(yield func(K, V) bool) { c.Descend(yield) }
 }
 
 // SubMap returns entries with keys in [from, to] (snapshot).

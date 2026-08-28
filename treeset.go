@@ -43,7 +43,7 @@ func NewTreeSetOrdered[T Ordered]() SortedSet[T] {
 func NewTreeSetFrom[T any](c Comparator[T], elements ...T) SortedSet[T] {
 	ts := newTreeSet(c)
 	for _, e := range elements {
-		ts.add(e)
+		ts.Add(e)
 	}
 	return ts
 }
@@ -89,10 +89,10 @@ func (t *treeSet[T]) ForEach(action func(element T) bool) {
 	})
 }
 
-// add inserts element only if no comparator-equivalent element is present.
-// The existing element is kept (never replaced), so a false return always
-// means the set did not change.
-func (t *treeSet[T]) add(element T) bool {
+// Add inserts element if absent. Returns true if the set changed.
+// If a comparator-equivalent element is already present, it is kept unchanged
+// (never replaced), so a false return always means the set did not change.
+func (t *treeSet[T]) Add(element T) bool {
 	if _, ok := t.bt.Get(element); ok {
 		return false
 	}
@@ -100,17 +100,11 @@ func (t *treeSet[T]) add(element T) bool {
 	return true
 }
 
-// Add inserts element if absent. Returns true if the set changed.
-// If a comparator-equivalent element is already present, it is kept unchanged.
-func (t *treeSet[T]) Add(element T) bool {
-	return t.add(element)
-}
-
 // AddAll inserts all given elements. Returns number added.
 func (t *treeSet[T]) AddAll(elements ...T) int {
 	added := 0
 	for _, e := range elements {
-		if t.add(e) {
+		if t.Add(e) {
 			added++
 		}
 	}
@@ -121,7 +115,7 @@ func (t *treeSet[T]) AddAll(elements ...T) int {
 func (t *treeSet[T]) AddSeq(seq iter.Seq[T]) int {
 	added := 0
 	for v := range seq {
-		if t.add(v) {
+		if t.Add(v) {
 			added++
 		}
 	}
@@ -182,18 +176,7 @@ func (t *treeSet[T]) RemoveFunc(predicate func(element T) bool) int {
 
 // RetainFunc keeps only elements satisfying predicate. Returns count removed.
 func (t *treeSet[T]) RetainFunc(predicate func(element T) bool) int {
-	capacity := max(t.bt.Len()/4, 16)
-	dels := make([]T, 0, capacity)
-	t.bt.Scan(func(item T) bool {
-		if !predicate(item) {
-			dels = append(dels, item)
-		}
-		return true
-	})
-	for _, v := range dels {
-		t.bt.Delete(v)
-	}
-	return len(dels)
+	return t.RemoveFunc(func(element T) bool { return !predicate(element) })
 }
 
 // Pop removes and returns the smallest element. Returns (zero, false) if empty.
@@ -235,7 +218,7 @@ func (t *treeSet[T]) Union(other Set[T]) Set[T] {
 		return true
 	})
 	for v := range other.Seq() {
-		out.add(v)
+		out.Add(v)
 	}
 	return out
 }
@@ -277,7 +260,7 @@ func (t *treeSet[T]) SymmetricDifference(other Set[T]) Set[T] {
 	})
 	for v := range other.Seq() {
 		if _, ok := t.bt.Get(v); !ok {
-			out.add(v)
+			out.Add(v)
 		}
 	}
 	return out
@@ -653,7 +636,7 @@ func (t *treeSet[T]) UnmarshalJSON(data []byte) error {
 func (t *treeSet[T]) replaceElements(elements []T) {
 	t.Clear()
 	for _, e := range elements {
-		t.add(e)
+		t.Add(e)
 	}
 }
 

@@ -388,24 +388,12 @@ func (c *concurrentTreeMap[K, V]) RemoveAndGet(key K) (V, bool) {
 
 // CompareAndSwap atomically replaces value if current equals old.
 func (c *concurrentTreeMap[K, V]) CompareAndSwap(key K, oldValue, newValue V, eq Equaler[V]) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if cur, ok := c.tm.Get(key); ok && eq(cur, oldValue) {
-		c.tm.Put(key, newValue)
-		return true
-	}
-	return false
+	return c.ReplaceIf(key, oldValue, newValue, eq)
 }
 
 // CompareAndDelete atomically deletes entry if current value equals provided.
 func (c *concurrentTreeMap[K, V]) CompareAndDelete(key K, value V, eq Equaler[V]) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if cur, ok := c.tm.Get(key); ok && eq(cur, value) {
-		_, _ = c.tm.Remove(key)
-		return true
-	}
-	return false
+	return c.RemoveIf(key, value, eq)
 }
 
 // --- SortedMap extras ---

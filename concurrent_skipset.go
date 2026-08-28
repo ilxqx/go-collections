@@ -156,24 +156,7 @@ func (c *concurrentSkipSet[T]) RemoveFunc(predicate func(element T) bool) int {
 
 // RetainFunc keeps only elements satisfying predicate. Returns count removed.
 func (c *concurrentSkipSet[T]) RetainFunc(predicate func(element T) bool) int {
-	size := c.Size()
-	if size == 0 {
-		return 0
-	}
-	dels := make([]T, 0, size/2)
-	c.s.Range(func(v T) bool {
-		if !predicate(v) {
-			dels = append(dels, v)
-		}
-		return true
-	})
-	count := 0
-	for _, v := range dels {
-		if c.s.Remove(v) {
-			count++
-		}
-	}
-	return count
+	return c.RemoveFunc(func(element T) bool { return !predicate(element) })
 }
 
 // Pop removes and returns the smallest element.
@@ -562,14 +545,7 @@ func (c *concurrentSkipSet[T]) DescendFrom(pivot T, action func(element T) bool)
 
 // Reversed returns a descending sequence (snapshot).
 func (c *concurrentSkipSet[T]) Reversed() iter.Seq[T] {
-	return func(yield func(T) bool) {
-		buf := c.ToSlice()
-		for _, v := range slices.Backward(buf) {
-			if !yield(v) {
-				return
-			}
-		}
-	}
+	return func(yield func(T) bool) { c.Descend(yield) }
 }
 
 // SubSet returns a new set containing elements in [from, to] (snapshot).

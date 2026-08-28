@@ -295,17 +295,7 @@ func (l *linkedList[T]) RemoveFunc(predicate func(element T) bool) int {
 
 // RetainFunc keeps only elements satisfying predicate. Returns count removed.
 func (l *linkedList[T]) RetainFunc(predicate func(element T) bool) int {
-	removed := 0
-	n := l.head
-	for n != nil {
-		next := n.next
-		if !predicate(n.value) {
-			l.removeNode(n)
-			removed++
-		}
-		n = next
-	}
-	return removed
+	return l.RemoveFunc(func(element T) bool { return !predicate(element) })
 }
 
 // IndexOf returns the index of the first occurrence, or -1.

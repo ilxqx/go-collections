@@ -156,24 +156,7 @@ func (s *concurrentHashSet[T]) RemoveFunc(predicate func(element T) bool) int {
 
 // RetainFunc keeps only elements satisfying predicate. Returns count removed.
 func (s *concurrentHashSet[T]) RetainFunc(predicate func(element T) bool) int {
-	size := s.Size()
-	if size == 0 {
-		return 0
-	}
-	dels := make([]T, 0, size/2)
-	s.m.Range(func(k T, _ struct{}) bool {
-		if !predicate(k) {
-			dels = append(dels, k)
-		}
-		return true
-	})
-	count := 0
-	for _, k := range dels {
-		if _, ok := s.m.LoadAndDelete(k); ok {
-			count++
-		}
-	}
-	return count
+	return s.RemoveFunc(func(element T) bool { return !predicate(element) })
 }
 
 // Pop removes and returns an arbitrary element. Returns (zero, false) if empty.
@@ -393,10 +376,7 @@ func (s *concurrentHashSet[T]) Every(predicate func(element T) bool) bool {
 }
 
 // AddIfAbsent atomically adds the element only if not present.
-func (s *concurrentHashSet[T]) AddIfAbsent(element T) bool {
-	_, loaded := s.m.LoadOrStore(element, struct{}{})
-	return !loaded
-}
+func (s *concurrentHashSet[T]) AddIfAbsent(element T) bool { return s.Add(element) }
 
 // RemoveAndGet atomically removes and returns the element if present.
 func (s *concurrentHashSet[T]) RemoveAndGet(element T) (T, bool) {
