@@ -789,7 +789,7 @@ func TestConcurrentHashMap_InterfaceKeyedPaths(t *testing.T) {
 	for i := range n {
 		v, ok := dst.M.Get(i)
 		require.Truef(t, ok, "key %d should still be present after resizing", i)
-		require.Equalf(t, i, v, "key %d should keep its value after resizing", i)
+		assert.Equalf(t, i, v, "key %d should keep its value after resizing", i)
 	}
 }
 

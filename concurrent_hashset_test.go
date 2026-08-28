@@ -407,7 +407,7 @@ func TestConcurrentHashSet_InterfaceElementPaths(t *testing.T) {
 	assert.True(t, dst.S.Contains(nil), "the nil element should survive the resizes")
 	assert.True(t, dst.S.Contains("a"), `the "a" element should survive the resizes`)
 	for i := range n {
-		require.Truef(t, dst.S.Contains(i), "element %d should still be present after resizing", i)
+		assert.Truef(t, dst.S.Contains(i), "element %d should still be present after resizing", i)
 	}
 }
 
