@@ -788,3 +788,22 @@ func TestConcurrentHashMap_InterfaceKeyedPaths(t *testing.T) {
 		require.True(t, dst.M.ContainsKey(k), "key %v should still be present after resizing", k)
 	}
 }
+
+// On every build — the nil-tolerant fallback included — a dynamically
+// unhashable key must panic at the hash step, before anything is stored or a
+// bucket lock is taken, leaving the container usable. The fallback used to
+// store such keys silently; the next comparison then panicked under the
+// bucket lock and wedged the map.
+func TestConcurrentHashMap_UnhashableKeyPanicsBeforeStoring(t *testing.T) {
+	t.Parallel()
+	m := NewConcurrentHashMap[any, int]()
+	m.Put("k", 1)
+	require.Panics(t, func() { m.Put([]int{1}, 1) }, "an unhashable key must panic like any hash map")
+	assert.Equal(t, 1, m.Size(), "the unhashable key must not be stored")
+	require.Panics(t, func() { m.Get([]int{1}) }, "lookups of unhashable keys must panic consistently")
+	v, ok := m.Get("k")
+	require.True(t, ok, "the map must stay usable after the panics")
+	assert.Equal(t, 1, v, "the stored value should be intact")
+	_, existed := m.Put("k2", 2)
+	assert.False(t, existed, "writes must still work after the panics")
+}

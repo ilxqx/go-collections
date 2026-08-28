@@ -408,3 +408,16 @@ func TestConcurrentHashSet_InterfaceElementPaths(t *testing.T) {
 		require.True(t, dst.S.Contains(e), "element %v should still be present after resizing", e)
 	}
 }
+
+// On every build — the nil-tolerant fallback included — a dynamically
+// unhashable element must panic at the hash step, before anything is stored
+// or a bucket lock is taken, leaving the container usable.
+func TestConcurrentHashSet_UnhashableElementPanicsBeforeStoring(t *testing.T) {
+	t.Parallel()
+	s := NewConcurrentHashSet[any]()
+	s.Add("k")
+	require.Panics(t, func() { s.Add([]int{1}) }, "an unhashable element must panic like any hash map")
+	assert.Equal(t, 1, s.Size(), "the unhashable element must not be stored")
+	assert.True(t, s.Contains("k"), "the set must stay usable after the panic")
+	assert.True(t, s.Add(42), "writes must still work after the panic")
+}
