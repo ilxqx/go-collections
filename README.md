@@ -6,7 +6,7 @@
 [![codecov](https://codecov.io/gh/coldsmirk/go-collections/branch/main/graph/badge.svg)](https://codecov.io/gh/coldsmirk/go-collections)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Generic, fast, and ergonomic collections for Go 1.25+. This library provides a comprehensive set of type-safe, generic data structures with clean APIs, consistent naming, and support for Go's `iter.Seq`/`iter.Seq2` for seamless for-range integration.
+Generic, fast, and ergonomic collections for Go 1.27+. This library provides a comprehensive set of type-safe, generic data structures with clean APIs, consistent naming, and support for Go's `iter.Seq`/`iter.Seq2` for seamless for-range integration.
 
 ## Table of Contents
 
@@ -53,7 +53,7 @@ Generic, fast, and ergonomic collections for Go 1.25+. This library provides a c
 
 - **Type-Safe Generics**: All collections are fully generic with compile-time type safety
 - **Interface Segregation**: Small, focused interfaces composed into higher-level ones
-- **Go 1.25+ Iteration**: Native support for `iter.Seq` and `iter.Seq2` for seamless for-range loops
+- **Native Iteration**: Support for `iter.Seq` and `iter.Seq2` for seamless for-range loops
 - **Consistent API**: Uniform naming across Set/Map/List; `(value, ok)` return patterns
 - **Concurrent Variants**: Thread-safe collections with atomic operations
 - **No Reflection**: Zero runtime reflection for maximum performance
@@ -62,7 +62,7 @@ Generic, fast, and ergonomic collections for Go 1.25+. This library provides a c
 
 ## Requirements
 
-- Go 1.25 or later (uses `iter.Seq`/`iter.Seq2`, `testing.B.Loop`, built-in `min`/`max`)
+- Go 1.27 or later (uses `iter.Seq`/`iter.Seq2` and `testing.B.Loop`; 1.27 is where `hash/maphash` hashes nil interface keys in every build mode, which the interface-keyed concurrent containers rely on)
 
 ## Installation
 
