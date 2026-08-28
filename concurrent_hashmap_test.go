@@ -755,3 +755,36 @@ func TestConcurrentHashMap_NilInterfaceKey(t *testing.T) {
 	require.Equal(t, 2, v, "RemoveAndGet should return the stored value")
 	require.False(t, m.ContainsKey(nil), "the nil key should be gone")
 }
+
+// The interface-keyed hasher must survive every entry path into the backing
+// map — construction from a source map, a gob-created zero-value receiver,
+// and table resizes — with nil keys present throughout.
+func TestConcurrentHashMap_InterfaceKeyedPaths(t *testing.T) {
+	t.Parallel()
+	m := NewConcurrentHashMapFrom(map[any]int{nil: 1, "a": 2, 3: 3})
+	v, ok := m.Get(nil)
+	require.True(t, ok, "the nil key from the source map should be present")
+	require.Equal(t, 1, v, "the nil key's value should round-trip")
+	require.Equal(t, 3, m.Size(), "all source entries should land")
+
+	gob.Register(NewConcurrentHashMap[any, int]())
+	type payload struct{ M Map[any, int] }
+	var buf bytes.Buffer
+	require.NoError(t, gob.NewEncoder(&buf).Encode(payload{M: m}), "encoding an interface-keyed map should succeed")
+	var dst payload
+	require.NoError(t, gob.NewDecoder(&buf).Decode(&dst), "decoding into a zero-value interface-keyed receiver should succeed")
+	v, ok = dst.M.Get(nil)
+	require.True(t, ok, "the decoded map should keep the nil key")
+	require.Equal(t, 1, v, "the nil key's value should survive the round-trip")
+	require.Equal(t, 3, dst.M.Size(), "the decoded map should hold every entry")
+
+	// Enough inserts to force several table resizes, which re-hash every key.
+	const n = 3000
+	for i := range n {
+		dst.M.Put(i, i)
+	}
+	require.Equal(t, n+2, dst.M.Size(), "every key should survive the resizes (3 overwrites the source entry)")
+	for _, k := range []any{nil, "a", 0, n / 2, n - 1} {
+		require.True(t, dst.M.ContainsKey(k), "key %v should still be present after resizing", k)
+	}
+}

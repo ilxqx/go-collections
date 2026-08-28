@@ -380,3 +380,31 @@ func TestConcurrentHashSet_NilInterfaceElement(t *testing.T) {
 	require.True(t, s2.Contains("a"), "the gob-decoded set should contain a")
 	require.Equal(t, 2, s2.Size(), "the gob payload should replace the contents")
 }
+
+// The interface-keyed hasher must survive every entry path into the backing
+// map — construction from elements, a gob-created zero-value receiver, and
+// table resizes — with a nil element present throughout.
+func TestConcurrentHashSet_InterfaceElementPaths(t *testing.T) {
+	t.Parallel()
+	gob.Register(NewConcurrentHashSet[any]())
+	type payload struct{ S Set[any] }
+	src := payload{S: NewConcurrentHashSetFrom[any](nil, "a", 3)}
+
+	var buf bytes.Buffer
+	require.NoError(t, gob.NewEncoder(&buf).Encode(src), "encoding a set holding nil should succeed")
+	var dst payload
+	require.NoError(t, gob.NewDecoder(&buf).Decode(&dst), "decoding into a zero-value interface-element receiver should succeed")
+	require.True(t, dst.S.Contains(nil), "the decoded set should keep the nil element")
+	require.True(t, dst.S.Contains("a"), "the decoded set should keep a")
+	require.Equal(t, 3, dst.S.Size(), "the decoded set should hold every element")
+
+	// Enough inserts to force several table resizes, which re-hash every key.
+	const n = 3000
+	for i := range n {
+		dst.S.Add(i)
+	}
+	require.Equal(t, n+2, dst.S.Size(), "every element should survive the resizes (3 was already present)")
+	for _, e := range []any{nil, "a", 0, n / 2, n - 1} {
+		require.True(t, dst.S.Contains(e), "element %v should still be present after resizing", e)
+	}
+}

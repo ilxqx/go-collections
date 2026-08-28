@@ -7,6 +7,7 @@ import (
 	"hash/maphash"
 	"iter"
 	"reflect"
+	"sync"
 
 	"github.com/puzpuzpuz/xsync/v3"
 )
@@ -31,6 +32,19 @@ func NewConcurrentHashMapFrom[K comparable, V any](src map[K]V) ConcurrentMap[K,
 	return m
 }
 
+// maphashAcceptsNil reports whether this build's maphash.Comparable can hash
+// values containing nil interfaces. The runtime-backed implementation always
+// can; Go 1.25's purego implementation (build tag purego) walks values with
+// reflect and panics on the zero reflect.Value a nil interface produces — at
+// the top level and nested inside structs alike. Probed once at first use.
+var maphashAcceptsNil = sync.OnceValue(func() (ok bool) {
+	defer func() { ok = recover() == nil }()
+	seed := maphash.MakeSeed()
+	_ = maphash.Comparable[any](seed, nil)
+	_ = maphash.Comparable[any](seed, struct{ X any }{})
+	return true
+})
+
 // newBackingMapOf builds the xsync map backing a concurrent hash container.
 // xsync's built-in hasher dereferences an interface key's dynamic type
 // pointer, so a nil interface — a valid hash-map key that the plain
@@ -42,9 +56,23 @@ func newBackingMapOf[K comparable, V any]() *xsync.MapOf[K, V] {
 		return xsync.NewMapOf[K, V]()
 	}
 	seed := maphash.MakeSeed()
+	hashValue := func(key K) uint64 { return maphash.Comparable(seed, key) }
+	if !maphashAcceptsNil() {
+		// Degraded but correct fallback: equal keys share their dynamic
+		// type, so hashing the type name alone keeps equal keys on equal
+		// hashes; different values of one type merely collide and are told
+		// apart by the map's key comparison.
+		hashValue = func(key K) uint64 {
+			t := reflect.TypeOf(key)
+			if t == nil {
+				return maphash.String(seed, "<nil>")
+			}
+			return maphash.String(seed, t.String())
+		}
+	}
 	return xsync.NewMapOfWithHasher[K, V](func(key K, tableSeed uint64) uint64 {
 		// fmix64 finalizer so xsync's per-table seed perturbs every bit.
-		h := maphash.Comparable(seed, key) ^ tableSeed
+		h := hashValue(key) ^ tableSeed
 		h ^= h >> 33
 		h *= 0xff51afd7ed558ccd
 		h ^= h >> 33
