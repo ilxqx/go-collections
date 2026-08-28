@@ -348,8 +348,8 @@ func (l *lockFreeList[T]) InsertAll(index int, elements ...T) bool {
 		return true
 	}
 	// Insert in reverse order to maintain order
-	for i := len(elements) - 1; i >= 0; i-- {
-		if !l.Insert(index, elements[i]) {
+	for _, e := range slices.Backward(elements) {
+		if !l.Insert(index, e) {
 			return false
 		}
 	}

@@ -227,8 +227,8 @@ func (l *arrayList[T]) IndexOf(element T, eq Equaler[T]) int {
 
 // LastIndexOf returns the index of the last occurrence, or -1.
 func (l *arrayList[T]) LastIndexOf(element T, eq Equaler[T]) int {
-	for i := len(l.data) - 1; i >= 0; i-- {
-		if eq(l.data[i], element) {
+	for i, v := range slices.Backward(l.data) {
+		if eq(v, element) {
 			return i
 		}
 	}

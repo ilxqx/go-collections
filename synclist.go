@@ -277,8 +277,8 @@ func (l *syncList[T]) IndexOf(element T, eq Equaler[T]) int {
 func (l *syncList[T]) LastIndexOf(element T, eq Equaler[T]) int {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	for i := len(l.data) - 1; i >= 0; i-- {
-		if eq(l.data[i], element) {
+	for i, v := range slices.Backward(l.data) {
+		if eq(v, element) {
 			return i
 		}
 	}

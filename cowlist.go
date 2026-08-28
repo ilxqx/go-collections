@@ -336,8 +336,8 @@ func (l *cowList[T]) IndexOf(element T, eq Equaler[T]) int {
 // LastIndexOf returns the index of the last occurrence.
 func (l *cowList[T]) LastIndexOf(element T, eq Equaler[T]) int {
 	snap := l.snapshot()
-	for i := len(snap) - 1; i >= 0; i-- {
-		if eq(snap[i], element) {
+	for i, v := range slices.Backward(snap) {
+		if eq(v, element) {
 			return i
 		}
 	}
