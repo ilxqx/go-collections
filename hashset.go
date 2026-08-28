@@ -375,7 +375,7 @@ func (s *hashSet[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
 
 // UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
 // Accepts the same JSON as UnmarshalJSON, streamed from dec.
-// A payload holding a dynamically unhashable element is rejected with an\n// error and leaves the set untouched.
+// A payload holding a dynamically unhashable element is rejected with an error and leaves the set untouched.
 func (s *hashSet[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	var slice []T
 	if err := jsonv2.UnmarshalDecode(dec, &slice); err != nil {

@@ -408,12 +408,17 @@ func (s *concurrentHashSet[T]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.ToSlice())
 }
 
-// refill replaces the set's contents with elements. A zero-value receiver —
-// gob allocates one when decoding an interface field — gets a fresh backing
-// map, which nothing else can reference yet. Otherwise the existing backing
-// map is refilled in place: replacing the s.m pointer would race with
-// concurrent readers of the receiver.
-func (s *concurrentHashSet[T]) refill(elements []T) {
+// refill replaces the set's contents with elements. Validation happens here,
+// before any mutation, so a payload holding a dynamically unhashable element
+// is rejected on every codec path with the set untouched. A zero-value
+// receiver — gob allocates one when decoding an interface field — gets a
+// fresh backing map, which nothing else can reference yet. Otherwise the
+// existing backing map is refilled in place: replacing the s.m pointer would
+// race with concurrent readers of the receiver.
+func (s *concurrentHashSet[T]) refill(elements []T) error {
+	if err := validateHashable(elements); err != nil {
+		return fmt.Errorf("unmarshal concurrent hashset: %w", err)
+	}
 	if s.m == nil {
 		s.m = newBackingMapOf[T, struct{}]()
 	} else {
@@ -422,6 +427,7 @@ func (s *concurrentHashSet[T]) refill(elements []T) {
 	for _, elem := range elements {
 		s.m.Store(elem, struct{}{})
 	}
+	return nil
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -432,11 +438,7 @@ func (s *concurrentHashSet[T]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &slice); err != nil {
 		return err
 	}
-	if err := validateHashable(slice); err != nil {
-		return fmt.Errorf("unmarshal concurrent hashset: %w", err)
-	}
-	s.refill(slice)
-	return nil
+	return s.refill(slice)
 }
 
 // MarshalJSONTo implements jsonv2.MarshalerTo.
@@ -447,17 +449,14 @@ func (s *concurrentHashSet[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
 
 // UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
 // Accepts the same JSON as UnmarshalJSON, streamed from dec.
-// A payload holding a dynamically unhashable element is rejected with an\n// error and leaves the set untouched.
+// A payload holding a dynamically unhashable element is rejected with an
+// error and leaves the set untouched.
 func (s *concurrentHashSet[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	var slice []T
 	if err := jsonv2.UnmarshalDecode(dec, &slice); err != nil {
 		return err
 	}
-	if err := validateHashable(slice); err != nil {
-		return fmt.Errorf("unmarshal concurrent hashset: %w", err)
-	}
-	s.refill(slice)
-	return nil
+	return s.refill(slice)
 }
 
 // GobEncode implements gob.GobEncoder.
@@ -480,11 +479,7 @@ func (s *concurrentHashSet[T]) GobDecode(data []byte) error {
 	if err := dec.Decode(&slice); err != nil {
 		return err
 	}
-	if err := validateHashable(slice); err != nil {
-		return fmt.Errorf("unmarshal concurrent hashset: %w", err)
-	}
-	s.refill(slice)
-	return nil
+	return s.refill(slice)
 }
 
 // Conformance.
