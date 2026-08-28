@@ -301,9 +301,14 @@ func (l *arrayList[T]) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-// Deserializes from a JSON array.
+// Deserializes from a JSON array; the receiver is untouched on error.
 func (l *arrayList[T]) UnmarshalJSON(data []byte) error {
-	return json.Unmarshal(data, &l.data)
+	var slice []T
+	if err := json.Unmarshal(data, &slice); err != nil {
+		return err
+	}
+	l.data = slice
+	return nil
 }
 
 // MarshalJSONTo implements jsonv2.MarshalerTo.
@@ -315,7 +320,12 @@ func (l *arrayList[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
 // UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
 // Accepts the same JSON as UnmarshalJSON, streamed from dec.
 func (l *arrayList[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
-	return jsonv2.UnmarshalDecode(dec, &l.data)
+	var slice []T
+	if err := jsonv2.UnmarshalDecode(dec, &slice); err != nil {
+		return err
+	}
+	l.data = slice
+	return nil
 }
 
 // GobEncode implements gob.GobEncoder.
@@ -330,8 +340,13 @@ func (l *arrayList[T]) GobEncode() ([]byte, error) {
 
 // GobDecode implements gob.GobDecoder.
 func (l *arrayList[T]) GobDecode(data []byte) error {
+	var slice []T
 	dec := gob.NewDecoder(bytes.NewReader(data))
-	return dec.Decode(&l.data)
+	if err := dec.Decode(&slice); err != nil {
+		return err
+	}
+	l.data = slice
+	return nil
 }
 
 // Compile-time conformance.

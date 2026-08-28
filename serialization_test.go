@@ -622,6 +622,36 @@ func (s *HashMapSerializationTestSuite) TestMultipleEntries() {
 	})
 }
 
+// Regression: stdlib decoders merge into an existing map, which used to
+// leave stale entries behind; every codec path must replace wholesale.
+func (s *HashMapSerializationTestSuite) TestDecodeReplacesExistingEntries() {
+	s.Run("JSON", func() {
+		original := NewHashMap[string, int]()
+		original.Put("fresh", 1)
+		data, err := json.Marshal(original)
+		s.Require().NoError(err, "Marshal should succeed")
+
+		restored := NewHashMap[string, int]()
+		restored.Put("stale", 99)
+		s.Require().NoError(json.Unmarshal(data, restored), "Unmarshal should succeed")
+		s.Equal(1, restored.Size(), "decode should replace, not merge")
+		s.False(restored.ContainsKey("stale"), "pre-existing entries should be gone")
+	})
+
+	s.Run("Gob", func() {
+		original := NewHashMap[string, int]()
+		original.Put("fresh", 1)
+		var buf bytes.Buffer
+		s.Require().NoError(gob.NewEncoder(&buf).Encode(original), "Gob encode should succeed")
+
+		restored := NewHashMap[string, int]()
+		restored.Put("stale", 99)
+		s.Require().NoError(gob.NewDecoder(&buf).Decode(restored), "Gob decode should succeed")
+		s.Equal(1, restored.Size(), "decode should replace, not merge")
+		s.False(restored.ContainsKey("stale"), "pre-existing entries should be gone")
+	})
+}
+
 func TestHashMapSerializationTestSuite(t *testing.T) {
 	suite.Run(t, new(HashMapSerializationTestSuite))
 }

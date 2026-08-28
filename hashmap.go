@@ -348,9 +348,25 @@ func (h *hashMap[K, V]) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-// Deserializes from a JSON object.
+// Deserializes from a JSON object, replacing the current contents; the
+// receiver is untouched on error.
 func (h *hashMap[K, V]) UnmarshalJSON(data []byte) error {
-	return json.Unmarshal(data, &h.m)
+	var m map[K]V
+	if err := json.Unmarshal(data, &m); err != nil {
+		return err
+	}
+	h.replaceWith(m)
+	return nil
+}
+
+// replaceWith installs m as the new backing map, keeping the map non-nil.
+// Decoding into a temp map first gives every codec path replace semantics
+// (stdlib decoders merge into an existing map) and error atomicity.
+func (h *hashMap[K, V]) replaceWith(m map[K]V) {
+	if m == nil {
+		m = make(map[K]V)
+	}
+	h.m = m
 }
 
 // MarshalJSONTo implements jsonv2.MarshalerTo.
@@ -361,8 +377,14 @@ func (h *hashMap[K, V]) MarshalJSONTo(enc *jsontext.Encoder) error {
 
 // UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
 // Accepts the same JSON as UnmarshalJSON, streamed from dec.
+// Same replace semantics as UnmarshalJSON.
 func (h *hashMap[K, V]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
-	return jsonv2.UnmarshalDecode(dec, &h.m)
+	var m map[K]V
+	if err := jsonv2.UnmarshalDecode(dec, &m); err != nil {
+		return err
+	}
+	h.replaceWith(m)
+	return nil
 }
 
 // GobEncode implements gob.GobEncoder.
@@ -376,9 +398,15 @@ func (h *hashMap[K, V]) GobEncode() ([]byte, error) {
 }
 
 // GobDecode implements gob.GobDecoder.
+// Same replace semantics as UnmarshalJSON.
 func (h *hashMap[K, V]) GobDecode(data []byte) error {
+	var m map[K]V
 	dec := gob.NewDecoder(bytes.NewReader(data))
-	return dec.Decode(&h.m)
+	if err := dec.Decode(&m); err != nil {
+		return err
+	}
+	h.replaceWith(m)
+	return nil
 }
 
 // Compile-time conformance checks with concrete instantiation.
