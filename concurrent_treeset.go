@@ -37,8 +37,6 @@ func NewConcurrentTreeSetOrdered[T Ordered]() ConcurrentSortedSet[T] {
 // NewConcurrentTreeSetFrom creates a set and inserts the given elements.
 func NewConcurrentTreeSetFrom[T any](cmpT Comparator[T], elements ...T) ConcurrentSortedSet[T] {
 	cs := &concurrentTreeSet[T]{tree: newTreeSet(cmpT)}
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
 	cs.tree.AddAll(elements...)
 	return cs
 }

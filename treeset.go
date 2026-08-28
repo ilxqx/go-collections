@@ -555,7 +555,7 @@ func (t *treeSet[T]) HeadSet(to T, inclusive bool) SortedSet[T] {
 			out.bt.Set(item)
 			return true
 		}
-		return c < 0
+		return false // past the bound: every later element is larger
 	})
 	return out
 }

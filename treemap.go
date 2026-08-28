@@ -23,9 +23,8 @@ type mapEntry[K any, V any] struct {
 // Ordering is defined by the provided Comparator[K].
 // Not concurrent-safe.
 type treeMap[K any, V any] struct {
-	bt      *btree.BTreeG[mapEntry[K, V]]
-	keyCmp  Comparator[K]
-	entryLt func(a, b mapEntry[K, V]) bool
+	bt     *btree.BTreeG[mapEntry[K, V]]
+	keyCmp Comparator[K]
 }
 
 func newTreeMap[K any, V any](cmpK Comparator[K]) *treeMap[K, V] {
@@ -33,11 +32,7 @@ func newTreeMap[K any, V any](cmpK Comparator[K]) *treeMap[K, V] {
 		panic("NewTreeMap: key comparator must not be nil")
 	}
 	lt := func(a, b mapEntry[K, V]) bool { return cmpK(a.key, b.key) < 0 }
-	return &treeMap[K, V]{
-		bt:      btree.NewBTreeG(lt),
-		keyCmp:  cmpK,
-		entryLt: lt,
-	}
+	return &treeMap[K, V]{bt: btree.NewBTreeG(lt), keyCmp: cmpK}
 }
 
 // NewTreeMap creates an empty SortedMap with a custom key comparator.
@@ -631,7 +626,7 @@ func (t *treeMap[K, V]) HeadMap(to K, inclusive bool) SortedMap[K, V] {
 			out.bt.Set(me)
 			return true
 		}
-		return c < 0
+		return false // past the bound: every later key is larger
 	})
 	return out
 }
@@ -681,7 +676,7 @@ func (t *treeMap[K, V]) GetByRank(rank int) (Entry[K, V], bool) {
 // The backing B-tree is copied copy-on-write, so this is O(1); both trees
 // share nodes until either side writes.
 func (t *treeMap[K, V]) CloneSorted() SortedMap[K, V] {
-	return &treeMap[K, V]{bt: t.bt.Copy(), keyCmp: t.keyCmp, entryLt: t.entryLt}
+	return &treeMap[K, V]{bt: t.bt.Copy(), keyCmp: t.keyCmp}
 }
 
 // ==========================

@@ -578,7 +578,7 @@ func (c *concurrentSkipSet[T]) HeadSet(to T, inclusive bool) SortedSet[T] {
 			out.Add(v)
 			return true
 		}
-		return v < to
+		return false // past the bound: every later element is larger
 	})
 	return out
 }

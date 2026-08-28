@@ -693,7 +693,7 @@ func (c *concurrentSkipMap[K, V]) HeadMap(to K, inclusive bool) SortedMap[K, V] 
 			out.Put(k, v)
 			return true
 		}
-		return k < to
+		return false // past the bound: every later key is larger
 	})
 	return out
 }

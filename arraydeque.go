@@ -59,14 +59,13 @@ func (d *arrayDeque[T]) String() string {
 }
 
 // PushFront adds an element to the front.
+// The invariant tail == mod(head+size, len(buf)) holds at every mutation
+// point, so moving head back while tail stays put keeps it intact.
 func (d *arrayDeque[T]) PushFront(element T) {
 	d.ensureCapacityForOne()
 	d.head = d.mod(d.head-1, len(d.buf))
 	d.buf[d.head] = element
 	d.size++
-	if d.size == 1 {
-		d.tail = d.mod(d.head+1, len(d.buf))
-	}
 }
 
 // PopFront removes and returns the front element.
@@ -180,11 +179,9 @@ func (d *arrayDeque[T]) at(i int) T {
 	return d.buf[d.mod(d.head+i, len(d.buf))]
 }
 
-// mod wraps n within [0,m).
+// mod wraps n within [0,m). Callers guarantee m > 0: every call site runs
+// after ensureCapacityForOne or behind a size > 0 guard.
 func (*arrayDeque[T]) mod(n, m int) int {
-	if m == 0 {
-		return 0
-	}
 	n %= m
 	if n < 0 {
 		n += m

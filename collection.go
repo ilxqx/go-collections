@@ -1,7 +1,6 @@
 package collections
 
 import (
-	"cmp"
 	"fmt"
 	"iter"
 	"strings"
@@ -754,7 +753,7 @@ type ConcurrentSortedMap[K, V any] interface {
 // The provided seq controls iteration ordering.
 func formatCollection[T any](name string, seq iter.Seq[T]) string {
 	var b strings.Builder
-	b.WriteString(cmp.Or(name, "collection"))
+	b.WriteString(name)
 	b.WriteString("{")
 	first := true
 	for v := range seq {
@@ -772,7 +771,7 @@ func formatCollection[T any](name string, seq iter.Seq[T]) string {
 // The provided seq controls iteration ordering.
 func formatMap[K, V any](name string, seq iter.Seq2[K, V]) string {
 	var b strings.Builder
-	b.WriteString(cmp.Or(name, "map"))
+	b.WriteString(name)
 	b.WriteString("{")
 	first := true
 	seq(func(k K, v V) bool {
