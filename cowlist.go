@@ -337,12 +337,7 @@ func (l *cowList[T]) Find(predicate func(element T) bool) (T, bool) {
 
 // FindIndex returns the index of the first element satisfying predicate.
 func (l *cowList[T]) FindIndex(predicate func(element T) bool) int {
-	for i, v := range l.snapshot() {
-		if predicate(v) {
-			return i
-		}
-	}
-	return -1
+	return slices.IndexFunc(l.snapshot(), predicate)
 }
 
 // SubList returns a new list containing elements in [from, to).

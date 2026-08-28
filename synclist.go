@@ -200,9 +200,7 @@ func (l *syncList[T]) RemoveAt(index int) (T, bool) {
 		return zero, false
 	}
 	removed := l.data[index]
-	oldLen := len(l.data)
 	l.data = slices.Delete(l.data, index, index+1)
-	clear(l.data[len(l.data):oldLen])
 	return removed, true
 }
 
@@ -212,9 +210,7 @@ func (l *syncList[T]) Remove(element T, eq Equaler[T]) bool {
 	defer l.mu.Unlock()
 	for i, v := range l.data {
 		if eq(v, element) {
-			oldLen := len(l.data)
 			l.data = slices.Delete(l.data, i, i+1)
-			clear(l.data[len(l.data):oldLen])
 			return true
 		}
 	}

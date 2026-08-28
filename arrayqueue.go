@@ -63,11 +63,6 @@ func (q *arrayQueue[T]) Enqueue(element T) {
 
 // EnqueueAll adds all elements to the back.
 func (q *arrayQueue[T]) EnqueueAll(elements ...T) {
-	if len(elements) == 0 {
-		return
-	}
-	// Pre-grow to reduce reallocations on large batches.
-	q.data = slices.Grow(q.data, len(elements))
 	q.data = append(q.data, elements...)
 }
 

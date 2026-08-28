@@ -159,11 +159,8 @@ func (l *arrayList[T]) RemoveAt(index int) (T, bool) {
 		return zero, false
 	}
 	removed := l.data[index]
-	copy(l.data[index:], l.data[index+1:])
-	// Clear last element to let GC reclaim referenced objects earlier.
-	var zero T
-	l.data[len(l.data)-1] = zero
-	l.data = l.data[:len(l.data)-1]
+	// slices.Delete shifts left and zeroes the vacated tail slot.
+	l.data = slices.Delete(l.data, index, index+1)
 	return removed, true
 }
 
@@ -186,18 +183,9 @@ func (l *arrayList[T]) RemoveLast() (T, bool) { return l.RemoveAt(len(l.data) - 
 // RemoveFunc removes all elements satisfying predicate. Returns count removed.
 func (l *arrayList[T]) RemoveFunc(predicate func(element T) bool) int {
 	oldLen := len(l.data)
-	j := 0
-	for _, v := range l.data {
-		if predicate(v) {
-			continue
-		}
-		l.data[j] = v
-		j++
-	}
-	// Clear the now-dead tail to avoid holding references.
-	clear(l.data[j:oldLen])
-	l.data = l.data[:j]
-	return oldLen - j
+	// slices.DeleteFunc compacts in place and zeroes the vacated tail.
+	l.data = slices.DeleteFunc(l.data, predicate)
+	return oldLen - len(l.data)
 }
 
 // RetainFunc keeps only elements satisfying predicate. Returns count removed.
@@ -243,12 +231,7 @@ func (l *arrayList[T]) Find(predicate func(element T) bool) (T, bool) {
 
 // FindIndex returns the index of the first element satisfying predicate, or -1.
 func (l *arrayList[T]) FindIndex(predicate func(element T) bool) int {
-	for i, v := range l.data {
-		if predicate(v) {
-			return i
-		}
-	}
-	return -1
+	return slices.IndexFunc(l.data, predicate)
 }
 
 // SubList returns a new list containing elements in [from, to).
@@ -257,9 +240,7 @@ func (l *arrayList[T]) SubList(from, to int) List[T] {
 	if from < 0 || to > n || from > to {
 		return NewArrayList[T]()
 	}
-	cp := make([]T, to-from)
-	copy(cp, l.data[from:to])
-	return &arrayList[T]{data: cp}
+	return &arrayList[T]{data: slices.Clone(l.data[from:to])}
 }
 
 // Reversed returns a sequence iterating in reverse order.
