@@ -496,13 +496,15 @@ func (c *concurrentTreeSet[T]) CloneSorted() SortedSet[T] {
 
 // MarshalJSON implements json.Marshaler.
 // Serializes elements in ascending order as a JSON array.
+// Snapshots under the read lock, then encodes without holding it.
 //
 // NOTE: The comparator is NOT serialized. Decode into a set constructed with
 // NewConcurrentTreeSet.
 func (c *concurrentTreeSet[T]) MarshalJSON() ([]byte, error) {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return json.Marshal(c.tree.ToSlice())
+	snap := c.tree.ToSlice()
+	c.mu.RUnlock()
+	return json.Marshal(snap)
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -541,16 +543,18 @@ func (c *concurrentTreeSet[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 
 // GobEncode implements gob.GobEncoder.
 // Serializes elements in ascending order.
+// Snapshots under the read lock, then encodes without holding it.
 //
 // NOTE: The comparator is NOT serialized. Decode into a set constructed with
 // NewConcurrentTreeSet.
 func (c *concurrentTreeSet[T]) GobEncode() ([]byte, error) {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
+	snap := c.tree.ToSlice()
+	c.mu.RUnlock()
 
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
-	if err := enc.Encode(c.tree.ToSlice()); err != nil {
+	if err := enc.Encode(snap); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil

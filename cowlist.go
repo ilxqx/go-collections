@@ -416,6 +416,15 @@ func (l *cowList[T]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(l.snapshot())
 }
 
+// replace installs slice as the new contents. Like every other mutator it
+// serializes through the writer mutex: a bare Store could race a concurrent
+// copy-on-write mutation and silently drop one side's update.
+func (l *cowList[T]) replace(slice []T) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.data.Store(&slice)
+}
+
 // UnmarshalJSON implements json.Unmarshaler.
 // Deserializes from a JSON array.
 func (l *cowList[T]) UnmarshalJSON(data []byte) error {
@@ -423,8 +432,7 @@ func (l *cowList[T]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &slice); err != nil {
 		return err
 	}
-	// Replace the atomic pointer data
-	l.data.Store(&slice)
+	l.replace(slice)
 	return nil
 }
 
@@ -441,7 +449,7 @@ func (l *cowList[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	if err := jsonv2.UnmarshalDecode(dec, &slice); err != nil {
 		return err
 	}
-	l.data.Store(&slice)
+	l.replace(slice)
 	return nil
 }
 
@@ -464,8 +472,7 @@ func (l *cowList[T]) GobDecode(data []byte) error {
 	if err := dec.Decode(&slice); err != nil {
 		return err
 	}
-	// Replace the atomic pointer data
-	l.data.Store(&slice)
+	l.replace(slice)
 	return nil
 }
 
