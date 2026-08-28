@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"iter"
 	"slices"
 	"sync/atomic"
@@ -78,9 +79,7 @@ func NewLockFreeListOrdered[T comparable]() List[T] {
 // NewLockFreeListFrom creates a lock-free list from elements.
 func NewLockFreeListFrom[T any](eq Equaler[T], elements ...T) List[T] {
 	l := NewLockFreeList(eq)
-	for _, e := range elements {
-		l.Add(e)
-	}
+	l.AddAll(elements...)
 	return l
 }
 
@@ -252,38 +251,53 @@ func (l *lockFreeList[T]) Last() (T, bool) {
 // Add appends the element at the end (O(n): walks the chain to find it).
 func (l *lockFreeList[T]) Add(element T) {
 	node := newLFNode(element)
+	l.appendChain(node, node)
+}
 
+// buildChain links the elements into a private node chain and returns its
+// ends. The chain is invisible to other goroutines until appendChain.
+func buildChain[T any](elements []T) (first, last *lfNode[T]) {
+	first = newLFNode(elements[0])
+	last = first
+	for _, e := range elements[1:] {
+		node := newLFNode(e)
+		last.next.Store(node)
+		last = node
+	}
+	return first, last
+}
+
+// appendChain attaches the privately built chain [first..last] before the
+// tail sentinel with a single CAS, so a whole batch costs one chain walk.
+// A lost race restarts from the head sentinel: nodes reached from there stay
+// valid, and a concurrent Clear must not resurrect a detached predecessor.
+func (l *lockFreeList[T]) appendChain(first, last *lfNode[T]) {
+	last.next.Store(l.tail)
 	for {
-		// Find the actual last node (before the tail sentinel)
 		pred := l.head
 		curr := pred.next.Load()
-
 		for curr != nil && curr != l.tail {
 			pred = curr
 			curr = curr.next.Load()
 		}
-
-		// Try to insert before tail
-		node.next.Store(l.tail)
-		if pred.next.CompareAndSwap(l.tail, node) {
+		if pred.next.CompareAndSwap(l.tail, first) {
 			return
 		}
 		// CAS failed, retry
 	}
 }
 
-// AddAll appends all elements.
+// AddAll appends all elements (O(n+m): one walk for the whole batch).
 func (l *lockFreeList[T]) AddAll(elements ...T) {
-	for _, e := range elements {
-		l.Add(e)
+	if len(elements) == 0 {
+		return
 	}
+	l.appendChain(buildChain(elements))
 }
 
 // AddSeq appends all elements from the sequence.
 func (l *lockFreeList[T]) AddSeq(seq iter.Seq[T]) {
-	for v := range seq {
-		l.Add(v)
-	}
+	l.AddAll(slices.Collect(seq)...)
 }
 
 // Insert inserts the element at index. Valid indexes are 0 through Size().
@@ -569,11 +583,8 @@ func (l *lockFreeList[T]) Sort(cmp Comparator[T]) {
 	snap := l.ToSlice()
 	slices.SortFunc(snap, cmp)
 
-	// Rebuild the list
 	l.Clear()
-	for _, v := range snap {
-		l.Add(v)
-	}
+	l.AddAll(snap...)
 }
 
 // Any returns true if at least one element satisfies predicate.
@@ -602,6 +613,19 @@ func (l *lockFreeList[T]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(l.ToSlice())
 }
 
+// refill replaces the contents with the decoded elements. A zero-value
+// receiver (which gob allocates for interface fields) has no sentinels and
+// no equaler, so it is rejected the same way the comparator containers
+// reject decoding without a comparator.
+func (l *lockFreeList[T]) refill(elements []T) error {
+	if l.head == nil {
+		return errors.New("unmarshal lockfreelist: no equaler; construct the list with NewLockFreeList before decoding")
+	}
+	l.Clear()
+	l.AddAll(elements...)
+	return nil
+}
+
 // UnmarshalJSON implements json.Unmarshaler.
 // Deserializes from a JSON array.
 func (l *lockFreeList[T]) UnmarshalJSON(data []byte) error {
@@ -609,12 +633,7 @@ func (l *lockFreeList[T]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &slice); err != nil {
 		return err
 	}
-	// Clear and rebuild
-	l.Clear()
-	for _, elem := range slice {
-		l.Add(elem)
-	}
-	return nil
+	return l.refill(slice)
 }
 
 // MarshalJSONTo implements jsonv2.MarshalerTo.
@@ -630,11 +649,7 @@ func (l *lockFreeList[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	if err := jsonv2.UnmarshalDecode(dec, &slice); err != nil {
 		return err
 	}
-	l.Clear()
-	for _, elem := range slice {
-		l.Add(elem)
-	}
-	return nil
+	return l.refill(slice)
 }
 
 // GobEncode implements gob.GobEncoder.
@@ -656,12 +671,7 @@ func (l *lockFreeList[T]) GobDecode(data []byte) error {
 	if err := dec.Decode(&slice); err != nil {
 		return err
 	}
-	// Clear and rebuild
-	l.Clear()
-	for _, elem := range slice {
-		l.Add(elem)
-	}
-	return nil
+	return l.refill(slice)
 }
 
 // Compile-time conformance.

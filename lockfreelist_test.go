@@ -706,3 +706,13 @@ func TestLockFreeList_InsertBounds(t *testing.T) {
 	assert.True(t, l.Insert(1, 42), "Insert at Size() must append")
 	assert.Equal(t, []int{10, 42}, l.ToSlice(), "Insert at Size() should append at the end")
 }
+
+// Regression: decoding into a zero-value receiver (as gob allocates for
+// interface fields) used to nil-panic in Clear; it must error instead.
+func TestLockFreeList_ZeroValueReceiverDecodeErrors(t *testing.T) {
+	t.Parallel()
+	var l lockFreeList[int]
+	err := l.UnmarshalJSON([]byte(`[1,2,3]`))
+	require.Error(t, err, "a zero-value receiver has no sentinels or equaler")
+	assert.Contains(t, err.Error(), "NewLockFreeList", "the error should point at the constructor")
+}
