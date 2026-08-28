@@ -651,8 +651,11 @@ type SortedMap[K, V any] interface {
 // All methods are safe for concurrent calls from multiple goroutines.
 //
 // Atomicity guarantees:
-//   - ATOMIC: Add, Remove, Contains, AddIfAbsent, RemoveAndGet, Pop
-//   - BEST-EFFORT: RemoveFunc, RetainFunc (snapshot + individual removes)
+//   - ATOMIC: Add, Remove, Contains, AddIfAbsent, RemoveAndGet
+//   - BEST-EFFORT: Pop (atomic in the mutex-guarded tree implementation;
+//     the hash and skip-list implementations pick then delete, retrying
+//     when a racing writer wins), RemoveFunc, RetainFunc (snapshot +
+//     individual removes)
 //   - NON-ATOMIC: AddAll, RemoveAll, AddSeq, RemoveSeq, Union, Intersection, etc.
 type ConcurrentSet[T any] interface {
 	Set[T]
@@ -722,11 +725,13 @@ type ConcurrentMap[K, V any] interface {
 	RemoveAndGet(key K) (V, bool)
 
 	// CompareAndSwap replaces value if current equals old.
-	// BEST-EFFORT: Atomic in ConcurrentHashMap; may race in ConcurrentSkipMap.
+	// BEST-EFFORT: Atomic in ConcurrentHashMap and ConcurrentTreeMap; may
+	// race in ConcurrentSkipMap.
 	CompareAndSwap(key K, oldValue, newValue V, eq Equaler[V]) bool
 
 	// CompareAndDelete deletes entry if current value equals provided.
-	// BEST-EFFORT: Atomic in ConcurrentHashMap; may race in ConcurrentSkipMap.
+	// BEST-EFFORT: Atomic in ConcurrentHashMap and ConcurrentTreeMap; may
+	// race in ConcurrentSkipMap.
 	CompareAndDelete(key K, value V, eq Equaler[V]) bool
 }
 

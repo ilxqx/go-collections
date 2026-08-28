@@ -326,7 +326,7 @@ func (c *concurrentTreeMap[K, V]) SeqValues() iter.Seq[V] {
 	}
 }
 
-// Clone returns a shallow snapshot as a non-concurrent HashMap.
+// Clone returns a shallow snapshot as a non-concurrent TreeMap.
 func (c *concurrentTreeMap[K, V]) Clone() Map[K, V] {
 	// Use TreeMap to avoid requiring comparable keys.
 	return c.CloneSorted()
