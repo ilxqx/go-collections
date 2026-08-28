@@ -349,3 +349,34 @@ func TestConcurrentHashSet_DecodeRejectsUnhashableElements(t *testing.T) {
 	require.True(t, s.Contains(float64(1)), "decoded elements should land")
 	require.Equal(t, 2, s.Size(), "the hashable payload should replace the old contents")
 }
+
+// Regression: xsync's default hasher dereferences an interface key's dynamic
+// type pointer, so a nil interface element — valid in the plain HashSet —
+// panicked in Add/Contains, and a decoded [null] cleared the set before
+// crashing in Store. Interface-keyed backings now hash with the runtime's
+// comparable hash, which handles nil.
+func TestConcurrentHashSet_NilInterfaceElement(t *testing.T) {
+	t.Parallel()
+	s := NewConcurrentHashSet[any]()
+	require.True(t, s.Add(nil), "adding a nil element should report a change")
+	require.True(t, s.Contains(nil), "the set should contain nil")
+	require.False(t, s.Add(nil), "re-adding nil should report no change")
+	s.Add("x")
+	require.Equal(t, 2, s.Size(), "nil and x should coexist")
+	require.True(t, s.Remove(nil), "nil should be removable")
+	require.False(t, s.Contains(nil), "nil should be gone after removal")
+
+	s2 := NewConcurrentHashSetFrom[any]("old")
+	require.NoError(t, s2.(json.Unmarshaler).UnmarshalJSON([]byte(`[null,1]`)),
+		"a payload holding null should decode")
+	require.True(t, s2.Contains(nil), "the decoded set should contain nil")
+	require.True(t, s2.Contains(float64(1)), "the decoded set should contain 1")
+	require.False(t, s2.Contains("old"), "the old contents should be replaced")
+
+	var buf bytes.Buffer
+	require.NoError(t, gob.NewEncoder(&buf).Encode([]any{nil, "a"}), "gob encodes nil interface values")
+	require.NoError(t, s2.(gob.GobDecoder).GobDecode(buf.Bytes()), "a gob payload holding nil should decode")
+	require.True(t, s2.Contains(nil), "the gob-decoded set should contain nil")
+	require.True(t, s2.Contains("a"), "the gob-decoded set should contain a")
+	require.Equal(t, 2, s2.Size(), "the gob payload should replace the contents")
+}

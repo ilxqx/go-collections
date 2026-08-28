@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"hash/maphash"
 	"iter"
+	"reflect"
 
 	"github.com/puzpuzpuz/xsync/v3"
 )
@@ -17,16 +19,39 @@ type concurrentHashMap[K comparable, V any] struct {
 
 // NewConcurrentHashMap creates an empty concurrent map.
 func NewConcurrentHashMap[K comparable, V any]() ConcurrentMap[K, V] {
-	return &concurrentHashMap[K, V]{m: xsync.NewMapOf[K, V]()}
+	return &concurrentHashMap[K, V]{m: newBackingMapOf[K, V]()}
 }
 
 // NewConcurrentHashMapFrom creates a concurrent map copying entries from a standard map.
 func NewConcurrentHashMapFrom[K comparable, V any](src map[K]V) ConcurrentMap[K, V] {
-	m := &concurrentHashMap[K, V]{m: xsync.NewMapOf[K, V]()}
+	m := &concurrentHashMap[K, V]{m: newBackingMapOf[K, V]()}
 	for k, v := range src {
 		m.m.Store(k, v)
 	}
 	return m
+}
+
+// newBackingMapOf builds the xsync map backing a concurrent hash container.
+// xsync's built-in hasher dereferences an interface key's dynamic type
+// pointer, so a nil interface — a valid hash-map key that the plain
+// containers accept — crashes it. Interface key types therefore hash with
+// the runtime's comparable hash, which handles nil; every other kind keeps
+// xsync's default hasher unchanged.
+func newBackingMapOf[K comparable, V any]() *xsync.MapOf[K, V] {
+	if reflect.TypeFor[K]().Kind() != reflect.Interface {
+		return xsync.NewMapOf[K, V]()
+	}
+	seed := maphash.MakeSeed()
+	return xsync.NewMapOfWithHasher[K, V](func(key K, tableSeed uint64) uint64 {
+		// fmix64 finalizer so xsync's per-table seed perturbs every bit.
+		h := maphash.Comparable(seed, key) ^ tableSeed
+		h ^= h >> 33
+		h *= 0xff51afd7ed558ccd
+		h ^= h >> 33
+		h *= 0xc4ceb9fe1a85ec53
+		h ^= h >> 33
+		return h
+	})
 }
 
 // runGuarded runs fn — a user callback executing while an internal bucket
@@ -652,7 +677,7 @@ func (m *concurrentHashMap[K, V]) MarshalJSON() ([]byte, error) {
 // concurrent readers of the receiver.
 func (m *concurrentHashMap[K, V]) refill(snapshot map[K]V) {
 	if m.m == nil {
-		m.m = xsync.NewMapOf[K, V]()
+		m.m = newBackingMapOf[K, V]()
 	} else {
 		m.m.Clear()
 	}

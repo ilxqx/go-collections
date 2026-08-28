@@ -20,12 +20,12 @@ type concurrentHashSet[T comparable] struct {
 
 // NewConcurrentHashSet creates an empty concurrent set.
 func NewConcurrentHashSet[T comparable]() ConcurrentSet[T] {
-	return &concurrentHashSet[T]{m: xsync.NewMapOf[T, struct{}]()}
+	return &concurrentHashSet[T]{m: newBackingMapOf[T, struct{}]()}
 }
 
 // NewConcurrentHashSetFrom creates a concurrent set and inserts elements.
 func NewConcurrentHashSetFrom[T comparable](elements ...T) ConcurrentSet[T] {
-	s := &concurrentHashSet[T]{m: xsync.NewMapOf[T, struct{}]()}
+	s := &concurrentHashSet[T]{m: newBackingMapOf[T, struct{}]()}
 	for _, e := range elements {
 		s.m.Store(e, struct{}{})
 	}
@@ -425,7 +425,7 @@ func (s *concurrentHashSet[T]) MarshalJSON() ([]byte, error) {
 // concurrent readers of the receiver.
 func (s *concurrentHashSet[T]) refill(elements []T) {
 	if s.m == nil {
-		s.m = xsync.NewMapOf[T, struct{}]()
+		s.m = newBackingMapOf[T, struct{}]()
 	} else {
 		s.m.Clear()
 	}

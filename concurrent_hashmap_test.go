@@ -726,3 +726,32 @@ func TestConcurrentHashMap_GobInterfaceRoundTrip(t *testing.T) {
 	dst.M.Put("c", 3)
 	require.True(t, dst.M.ContainsKey("c"), "the decoded map should accept writes")
 }
+
+// Regression: xsync's default hasher dereferences an interface key's dynamic
+// type pointer, so a nil interface key panicked in every keyed operation.
+// Interface-keyed backings now hash with the runtime's comparable hash.
+func TestConcurrentHashMap_NilInterfaceKey(t *testing.T) {
+	t.Parallel()
+	m := NewConcurrentHashMap[any, int]()
+	_, existed := m.Put(nil, 1)
+	require.False(t, existed, "the nil key should be new")
+	v, ok := m.Get(nil)
+	require.True(t, ok, "the nil key should be present")
+	require.Equal(t, 1, v, "the stored value should round-trip")
+
+	old, existed := m.Put(nil, 2)
+	require.True(t, existed, "overwriting the nil key should report the old value")
+	require.Equal(t, 1, old, "the old value should be returned")
+
+	m.Put("k", 3)
+	require.Equal(t, 2, m.Size(), "nil and k should coexist")
+
+	got, computed := m.GetOrCompute(nil, func() int { return 99 })
+	require.False(t, computed, "the nil key already has a value")
+	require.Equal(t, 2, got, "GetOrCompute should return the stored value")
+
+	v, ok = m.RemoveAndGet(nil)
+	require.True(t, ok, "the nil key should be removable")
+	require.Equal(t, 2, v, "RemoveAndGet should return the stored value")
+	require.False(t, m.ContainsKey(nil), "the nil key should be gone")
+}
