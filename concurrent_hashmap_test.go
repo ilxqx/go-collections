@@ -793,11 +793,10 @@ func TestConcurrentHashMap_InterfaceKeyedPaths(t *testing.T) {
 	}
 }
 
-// On every build — the nil-tolerant fallback included — a dynamically
-// unhashable key must panic at the hash step, before anything is stored or a
-// bucket lock is taken, leaving the container usable. The fallback used to
-// store such keys silently; the next comparison then panicked under the
-// bucket lock and wedged the map.
+// A dynamically unhashable key must panic at the hash step, before anything
+// is stored or a bucket lock is taken, leaving the container usable. (A
+// since-removed purego hash fallback once stored such keys silently; the
+// next comparison then panicked under the bucket lock and wedged the map.)
 func TestConcurrentHashMap_UnhashableKeyPanicsBeforeStoring(t *testing.T) {
 	t.Parallel()
 	m := NewConcurrentHashMap[any, int]()

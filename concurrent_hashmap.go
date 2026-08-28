@@ -7,7 +7,6 @@ import (
 	"hash/maphash"
 	"iter"
 	"reflect"
-	"sync"
 
 	"github.com/puzpuzpuz/xsync/v3"
 )
@@ -32,38 +31,20 @@ func NewConcurrentHashMapFrom[K comparable, V any](src map[K]V) ConcurrentMap[K,
 	return m
 }
 
-// maphashAcceptsNil reports whether this build's maphash.Comparable can hash
-// values containing nil interfaces. The runtime-backed implementation always
-// can; Go 1.25's purego implementation (build tag purego) walks values with
-// reflect and panics on the zero reflect.Value a nil interface produces — at
-// the top level and nested inside structs alike. Probed once at first use.
-var maphashAcceptsNil = sync.OnceValue(func() (ok bool) {
-	defer func() { ok = recover() == nil }()
-	seed := maphash.MakeSeed()
-	_ = maphash.Comparable[any](seed, nil)
-	_ = maphash.Comparable[any](seed, struct{ X any }{})
-	return true
-})
-
 // newBackingMapOf builds the xsync map backing a concurrent hash container.
 // xsync's built-in hasher dereferences an interface key's dynamic type
 // pointer, so a nil interface — a valid hash-map key that the plain
 // containers accept — crashes it. Interface key types therefore hash with
-// the runtime's comparable hash, which handles nil; every other kind keeps
-// xsync's default hasher unchanged. Builds whose maphash cannot walk nil
-// interfaces get the nil-tolerant variant instead.
+// the runtime's comparable hash, which handles nil (in every build mode
+// since Go 1.27, this module's minimum); every other kind keeps xsync's
+// default hasher unchanged.
 func newBackingMapOf[K comparable, V any]() *xsync.MapOf[K, V] {
 	if reflect.TypeFor[K]().Kind() != reflect.Interface {
 		return xsync.NewMapOf[K, V]()
 	}
 	seed := maphash.MakeSeed()
-	if maphashAcceptsNil() {
-		return xsync.NewMapOfWithHasher[K, V](func(key K, tableSeed uint64) uint64 {
-			return mixHash(maphash.Comparable(seed, key) ^ tableSeed)
-		})
-	}
 	return xsync.NewMapOfWithHasher[K, V](func(key K, tableSeed uint64) uint64 {
-		return mixHash(nilTolerantHash(seed, key) ^ tableSeed)
+		return mixHash(maphash.Comparable(seed, key) ^ tableSeed)
 	})
 }
 
@@ -76,39 +57,6 @@ func mixHash(h uint64) uint64 {
 	h *= 0xc4ceb9fe1a85ec53
 	h ^= h >> 33
 	return h
-}
-
-// nilTolerantHash hashes key on builds whose maphash.Comparable cannot walk
-// values containing nil interfaces (Go 1.25's purego implementation). It
-// first tries maphash — full fidelity for every ordinary value — and only
-// when that panics falls back to hashing the dynamic type name: equal keys
-// share their dynamic type and nil layout, so equal keys still hash equal,
-// and only the values maphash cannot walk collide, per type. A genuinely
-// unhashable value re-panics like any hash map — at the hash step, before
-// the key could be stored or a bucket lock taken.
-func nilTolerantHash[K comparable](seed maphash.Seed, key K) uint64 {
-	if h, ok := tryMaphash(seed, key); ok {
-		return h
-	}
-	rv := reflect.ValueOf(key)
-	if !rv.IsValid() {
-		return maphash.String(seed, "<nil>")
-	}
-	if !rv.Comparable() {
-		panic("hash of unhashable type " + rv.Type().String())
-	}
-	return maphash.String(seed, rv.Type().String())
-}
-
-// tryMaphash reports whether maphash.Comparable could hash key, recovering
-// its panic when it could not.
-func tryMaphash[K comparable](seed maphash.Seed, key K) (h uint64, ok bool) {
-	defer func() {
-		if recover() != nil {
-			ok = false
-		}
-	}()
-	return maphash.Comparable(seed, key), true
 }
 
 // runGuarded runs fn — a user callback executing while an internal bucket

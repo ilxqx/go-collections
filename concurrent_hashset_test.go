@@ -411,9 +411,9 @@ func TestConcurrentHashSet_InterfaceElementPaths(t *testing.T) {
 	}
 }
 
-// On every build — the nil-tolerant fallback included — a dynamically
-// unhashable element must panic at the hash step, before anything is stored
-// or a bucket lock is taken, leaving the container usable.
+// A dynamically unhashable element must panic at the hash step, before
+// anything is stored or a bucket lock is taken, leaving the container
+// usable.
 func TestConcurrentHashSet_UnhashableElementPanicsBeforeStoring(t *testing.T) {
 	t.Parallel()
 	s := NewConcurrentHashSet[any]()
