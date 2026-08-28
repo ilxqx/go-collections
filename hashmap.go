@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"iter"
 	"maps"
 	"slices"
@@ -349,6 +351,18 @@ func (h *hashMap[K, V]) MarshalJSON() ([]byte, error) {
 // Deserializes from a JSON object.
 func (h *hashMap[K, V]) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(data, &h.m)
+}
+
+// MarshalJSONTo implements jsonv2.MarshalerTo.
+// Streams the same JSON as MarshalJSON into enc.
+func (h *hashMap[K, V]) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return jsonv2.MarshalEncode(enc, h.m)
+}
+
+// UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
+// Accepts the same JSON as UnmarshalJSON, streamed from dec.
+func (h *hashMap[K, V]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	return jsonv2.UnmarshalDecode(dec, &h.m)
 }
 
 // GobEncode implements gob.GobEncoder.

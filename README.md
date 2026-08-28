@@ -47,6 +47,7 @@ Generic, fast, and ergonomic collections for Go 1.27+. This library provides a c
 - [Deques](#deques)
   - [Deque Interface](#deque-interface)
   - [ArrayDeque](#arraydeque)
+- [Serialization](#serialization)
 - [License](#license)
 
 ## Features
@@ -59,6 +60,7 @@ Generic, fast, and ergonomic collections for Go 1.27+. This library provides a c
 - **No Reflection**: Zero runtime reflection for maximum performance
 - **Sorted Collections**: B-Tree and Skip List backed sorted sets and maps
 - **Memory Efficient**: Optimized to prevent memory leaks with `slices.Delete` and proper capacity management
+- **Serialization**: JSON (`encoding/json` v1 and streaming `encoding/json/v2`) and gob on every container
 
 ## Requirements
 
@@ -996,6 +998,22 @@ for v := range deque.Reversed() {
 ```
 
 ---
+
+## Serialization
+
+Every container implements four codec interfaces with one wire format per container:
+
+- **JSON v1**: `json.Marshaler`/`json.Unmarshaler` (`encoding/json`)
+- **JSON v2**: `jsonv2.MarshalerTo`/`jsonv2.UnmarshalerFrom` (`encoding/json/v2`, Go 1.27+) — the same JSON as v1, streamed through `jsontext.Encoder`/`jsontext.Decoder` without an intermediate buffer. `encoding/json/v2` picks these automatically; on the v2 path, v2's semantic options and defaults apply to the contained elements.
+- **Gob**: `gob.GobEncoder`/`gob.GobDecoder`
+
+Lists, sets, stacks, queues and deques serialize as JSON arrays; hash maps as JSON objects; sorted maps as an `{"entries": [{"key": ..., "value": ...}]}` wrapper that preserves non-string keys.
+
+Contracts that hold on every codec path:
+
+- Comparator-carrying containers (TreeSet, TreeMap, PriorityQueue and their concurrent wrappers) cannot decode into a zero-value receiver: construct them first, or use the `Unmarshal*JSON`/`Unmarshal*Gob` helpers. The comparator itself is never serialized.
+- Hash sets reject payloads holding dynamically unhashable elements (possible when the element type is an interface) with an error, leaving the receiver untouched.
+- Concurrent containers snapshot for encoding and refill their existing backing store on decode, so concurrent readers stay safe; decoding is not atomic with respect to concurrent writers.
 
 ## License
 

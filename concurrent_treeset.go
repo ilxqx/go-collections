@@ -5,6 +5,8 @@ import (
 	"cmp"
 	"encoding/gob"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"iter"
 	"sync"
@@ -558,6 +560,28 @@ func (c *concurrentTreeSet[T]) UnmarshalJSON(data []byte) error {
 		return errors.New("unmarshal concurrent treeset: no comparator; construct the set with NewConcurrentTreeSet before decoding")
 	}
 	return c.tree.UnmarshalJSON(data)
+}
+
+// MarshalJSONTo implements jsonv2.MarshalerTo.
+// Streams the same JSON as MarshalJSON into enc.
+// Snapshots under the read lock, then encodes without holding it.
+func (c *concurrentTreeSet[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
+	c.mu.RLock()
+	snap := c.tree.ToSlice()
+	c.mu.RUnlock()
+	return jsonv2.MarshalEncode(enc, snap)
+}
+
+// UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
+// Accepts the same JSON as UnmarshalJSON, streamed from dec.
+// Same comparator contract as UnmarshalJSON.
+func (c *concurrentTreeSet[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.tree == nil {
+		return errors.New("unmarshal concurrent treeset: no comparator; construct the set with NewConcurrentTreeSet before decoding")
+	}
+	return c.tree.UnmarshalJSONFrom(dec)
 }
 
 // GobEncode implements gob.GobEncoder.

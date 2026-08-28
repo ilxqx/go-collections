@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"iter"
 	"slices"
 
@@ -766,17 +768,7 @@ func (c *concurrentSkipMap[K, V]) CloneSorted() SortedMap[K, V] {
 // NOTE: ConcurrentSkipMap only supports Ordered key types, so deserialization
 // can be done directly without providing a comparator.
 func (c *concurrentSkipMap[K, V]) MarshalJSON() ([]byte, error) {
-	wrapped := serializableMap[K, V]{
-		Entries: make([]serializableEntry[K, V], 0),
-	}
-	c.m.Range(func(k K, v V) bool {
-		wrapped.Entries = append(wrapped.Entries, serializableEntry[K, V]{
-			Key:   k,
-			Value: v,
-		})
-		return true
-	})
-	return json.Marshal(wrapped)
+	return json.Marshal(serializableMap[K, V]{Entries: c.snapshotEntries()})
 }
 
 // refill replaces the map's contents with entries. A zero-value receiver —
@@ -807,17 +799,38 @@ func (c *concurrentSkipMap[K, V]) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// snapshotEntries copies the entries in ascending key order (best-effort
+// under concurrency).
+func (c *concurrentSkipMap[K, V]) snapshotEntries() []serializableEntry[K, V] {
+	entries := make([]serializableEntry[K, V], 0, c.Size())
+	c.m.Range(func(k K, v V) bool {
+		entries = append(entries, serializableEntry[K, V]{Key: k, Value: v})
+		return true
+	})
+	return entries
+}
+
+// MarshalJSONTo implements jsonv2.MarshalerTo.
+// Streams the same JSON as MarshalJSON into enc.
+func (c *concurrentSkipMap[K, V]) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return jsonv2.MarshalEncode(enc, serializableMap[K, V]{Entries: c.snapshotEntries()})
+}
+
+// UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
+// Accepts the same JSON as UnmarshalJSON, streamed from dec.
+func (c *concurrentSkipMap[K, V]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	var wrapped serializableMap[K, V]
+	if err := jsonv2.UnmarshalDecode(dec, &wrapped); err != nil {
+		return err
+	}
+	c.refill(wrapped.Entries)
+	return nil
+}
+
 // GobEncode implements gob.GobEncoder.
 // Serializes entries in ascending key order.
 func (c *concurrentSkipMap[K, V]) GobEncode() ([]byte, error) {
-	entries := make([]serializableEntry[K, V], 0)
-	c.m.Range(func(k K, v V) bool {
-		entries = append(entries, serializableEntry[K, V]{
-			Key:   k,
-			Value: v,
-		})
-		return true
-	})
+	entries := c.snapshotEntries()
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	if err := enc.Encode(entries); err != nil {

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"iter"
 	"slices"
 )
@@ -113,6 +115,18 @@ func (s *arrayStack[T]) MarshalJSON() ([]byte, error) {
 // Deserializes from a JSON array.
 func (s *arrayStack[T]) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(data, &s.data)
+}
+
+// MarshalJSONTo implements jsonv2.MarshalerTo.
+// Streams the same JSON as MarshalJSON into enc.
+func (s *arrayStack[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return jsonv2.MarshalEncode(enc, s.data)
+}
+
+// UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
+// Accepts the same JSON as UnmarshalJSON, streamed from dec.
+func (s *arrayStack[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	return jsonv2.UnmarshalDecode(dec, &s.data)
 }
 
 // GobEncode implements gob.GobEncoder.

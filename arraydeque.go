@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"iter"
 )
 
@@ -212,12 +214,34 @@ func (d *arrayDeque[T]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &slice); err != nil {
 		return err
 	}
-	// Rebuild deque; the buffer is exactly full, so tail wraps to 0.
+	d.replaceFromSlice(slice)
+	return nil
+}
+
+// replaceFromSlice rebuilds the deque from slice; the buffer is exactly
+// full, so tail wraps to 0.
+func (d *arrayDeque[T]) replaceFromSlice(slice []T) {
 	d.buf = make([]T, len(slice))
 	copy(d.buf, slice)
 	d.head = 0
 	d.tail = 0
 	d.size = len(slice)
+}
+
+// MarshalJSONTo implements jsonv2.MarshalerTo.
+// Streams the same JSON as MarshalJSON into enc.
+func (d *arrayDeque[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return jsonv2.MarshalEncode(enc, d.ToSlice())
+}
+
+// UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
+// Accepts the same JSON as UnmarshalJSON, streamed from dec.
+func (d *arrayDeque[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	var slice []T
+	if err := jsonv2.UnmarshalDecode(dec, &slice); err != nil {
+		return err
+	}
+	d.replaceFromSlice(slice)
 	return nil
 }
 
@@ -238,12 +262,7 @@ func (d *arrayDeque[T]) GobDecode(data []byte) error {
 	if err := dec.Decode(&slice); err != nil {
 		return err
 	}
-	// Rebuild deque; the buffer is exactly full, so tail wraps to 0.
-	d.buf = make([]T, len(slice))
-	copy(d.buf, slice)
-	d.head = 0
-	d.tail = 0
-	d.size = len(slice)
+	d.replaceFromSlice(slice)
 	return nil
 }
 

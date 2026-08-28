@@ -5,6 +5,8 @@ import (
 	"cmp"
 	"encoding/gob"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"iter"
 
@@ -692,17 +694,7 @@ func (t *treeMap[K, V]) CloneSorted() SortedMap[K, V] {
 // NOTE: The comparator is NOT serialized. Decode into a map constructed with
 // NewTreeMap, or use UnmarshalTreeMapJSON / UnmarshalTreeMapOrderedJSON.
 func (t *treeMap[K, V]) MarshalJSON() ([]byte, error) {
-	wrapped := serializableMap[K, V]{
-		Entries: make([]serializableEntry[K, V], 0, t.bt.Len()),
-	}
-	t.bt.Scan(func(me mapEntry[K, V]) bool {
-		wrapped.Entries = append(wrapped.Entries, serializableEntry[K, V]{
-			Key:   me.key,
-			Value: me.value,
-		})
-		return true
-	})
-	return json.Marshal(wrapped)
+	return json.Marshal(serializableMap[K, V]{Entries: t.snapshotEntries()})
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -716,10 +708,46 @@ func (t *treeMap[K, V]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &wrapped); err != nil {
 		return err
 	}
+	t.replaceEntries(wrapped.Entries)
+	return nil
+}
+
+// snapshotEntries copies the entries in ascending key order.
+func (t *treeMap[K, V]) snapshotEntries() []serializableEntry[K, V] {
+	entries := make([]serializableEntry[K, V], 0, t.bt.Len())
+	t.bt.Scan(func(me mapEntry[K, V]) bool {
+		entries = append(entries, serializableEntry[K, V]{Key: me.key, Value: me.value})
+		return true
+	})
+	return entries
+}
+
+// replaceEntries replaces the map's contents with entries.
+func (t *treeMap[K, V]) replaceEntries(entries []serializableEntry[K, V]) {
 	t.Clear()
-	for _, entry := range wrapped.Entries {
+	for _, entry := range entries {
 		t.Put(entry.Key, entry.Value)
 	}
+}
+
+// MarshalJSONTo implements jsonv2.MarshalerTo.
+// Streams the same JSON as MarshalJSON into enc.
+func (t *treeMap[K, V]) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return jsonv2.MarshalEncode(enc, serializableMap[K, V]{Entries: t.snapshotEntries()})
+}
+
+// UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
+// Accepts the same JSON as UnmarshalJSON, streamed from dec.
+// Same comparator contract as UnmarshalJSON.
+func (t *treeMap[K, V]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	if t.keyCmp == nil {
+		return errors.New("unmarshal treemap: no comparator; construct the map with NewTreeMap before decoding, or use UnmarshalTreeMapJSON/UnmarshalTreeMapOrderedJSON")
+	}
+	var wrapped serializableMap[K, V]
+	if err := jsonv2.UnmarshalDecode(dec, &wrapped); err != nil {
+		return err
+	}
+	t.replaceEntries(wrapped.Entries)
 	return nil
 }
 
@@ -729,14 +757,7 @@ func (t *treeMap[K, V]) UnmarshalJSON(data []byte) error {
 // NOTE: The comparator is NOT serialized. Decode into a map constructed with
 // NewTreeMap, or use UnmarshalTreeMapGob / UnmarshalTreeMapOrderedGob.
 func (t *treeMap[K, V]) GobEncode() ([]byte, error) {
-	entries := make([]serializableEntry[K, V], 0, t.bt.Len())
-	t.bt.Scan(func(me mapEntry[K, V]) bool {
-		entries = append(entries, serializableEntry[K, V]{
-			Key:   me.key,
-			Value: me.value,
-		})
-		return true
-	})
+	entries := t.snapshotEntries()
 
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
@@ -758,10 +779,7 @@ func (t *treeMap[K, V]) GobDecode(data []byte) error {
 	if err := dec.Decode(&entries); err != nil {
 		return err
 	}
-	t.Clear()
-	for _, entry := range entries {
-		t.Put(entry.Key, entry.Value)
-	}
+	t.replaceEntries(entries)
 	return nil
 }
 

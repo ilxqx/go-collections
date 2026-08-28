@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"hash/maphash"
 	"iter"
 	"reflect"
@@ -666,13 +668,7 @@ func (m *concurrentHashMap[K, V]) CompareAndDelete(key K, value V, eq Equaler[V]
 // NOTE: Provides snapshot consistency - concurrent modifications
 // during serialization may not be reflected.
 func (m *concurrentHashMap[K, V]) MarshalJSON() ([]byte, error) {
-	// Build a standard Go map from the concurrent map
-	snapshot := make(map[K]V)
-	m.m.Range(func(key K, value V) bool {
-		snapshot[key] = value
-		return true
-	})
-	return json.Marshal(snapshot)
+	return json.Marshal(m.snapshotMap())
 }
 
 // refill replaces the map's contents with snapshot. A zero-value receiver —
@@ -702,14 +698,38 @@ func (m *concurrentHashMap[K, V]) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// GobEncode implements gob.GobEncoder.
-// Serializes a snapshot of the map.
-func (m *concurrentHashMap[K, V]) GobEncode() ([]byte, error) {
-	snapshot := make(map[K]V)
+// snapshotMap copies the entries into a plain map (best-effort under
+// concurrency).
+func (m *concurrentHashMap[K, V]) snapshotMap() map[K]V {
+	snapshot := make(map[K]V, m.Size())
 	m.m.Range(func(key K, value V) bool {
 		snapshot[key] = value
 		return true
 	})
+	return snapshot
+}
+
+// MarshalJSONTo implements jsonv2.MarshalerTo.
+// Streams the same JSON as MarshalJSON into enc.
+func (m *concurrentHashMap[K, V]) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return jsonv2.MarshalEncode(enc, m.snapshotMap())
+}
+
+// UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
+// Accepts the same JSON as UnmarshalJSON, streamed from dec.
+func (m *concurrentHashMap[K, V]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	var snapshot map[K]V
+	if err := jsonv2.UnmarshalDecode(dec, &snapshot); err != nil {
+		return err
+	}
+	m.refill(snapshot)
+	return nil
+}
+
+// GobEncode implements gob.GobEncoder.
+// Serializes a snapshot of the map.
+func (m *concurrentHashMap[K, V]) GobEncode() ([]byte, error) {
+	snapshot := m.snapshotMap()
 
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)

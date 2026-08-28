@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"iter"
 )
 
@@ -500,14 +502,34 @@ func (l *linkedList[T]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &slice); err != nil {
 		return err
 	}
-	// Clear existing list
+	l.replaceFromSlice(slice)
+	return nil
+}
+
+// replaceFromSlice replaces the list's contents with slice.
+func (l *linkedList[T]) replaceFromSlice(slice []T) {
 	l.head = nil
 	l.tail = nil
 	l.size = 0
-	// Add all elements
 	for _, elem := range slice {
 		l.Add(elem)
 	}
+}
+
+// MarshalJSONTo implements jsonv2.MarshalerTo.
+// Streams the same JSON as MarshalJSON into enc.
+func (l *linkedList[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return jsonv2.MarshalEncode(enc, l.ToSlice())
+}
+
+// UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
+// Accepts the same JSON as UnmarshalJSON, streamed from dec.
+func (l *linkedList[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	var slice []T
+	if err := jsonv2.UnmarshalDecode(dec, &slice); err != nil {
+		return err
+	}
+	l.replaceFromSlice(slice)
 	return nil
 }
 
@@ -528,14 +550,7 @@ func (l *linkedList[T]) GobDecode(data []byte) error {
 	if err := dec.Decode(&slice); err != nil {
 		return err
 	}
-	// Clear existing list
-	l.head = nil
-	l.tail = nil
-	l.size = 0
-	// Add all elements
-	for _, elem := range slice {
-		l.Add(elem)
-	}
+	l.replaceFromSlice(slice)
 	return nil
 }
 

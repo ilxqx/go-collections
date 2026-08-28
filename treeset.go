@@ -5,6 +5,8 @@ import (
 	"cmp"
 	"encoding/gob"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"iter"
 
@@ -643,10 +645,36 @@ func (t *treeSet[T]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &elements); err != nil {
 		return err
 	}
+	t.replaceElements(elements)
+	return nil
+}
+
+// replaceElements replaces the set's contents with elements.
+func (t *treeSet[T]) replaceElements(elements []T) {
 	t.Clear()
 	for _, e := range elements {
 		t.add(e)
 	}
+}
+
+// MarshalJSONTo implements jsonv2.MarshalerTo.
+// Streams the same JSON as MarshalJSON into enc.
+func (t *treeSet[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return jsonv2.MarshalEncode(enc, t.ToSlice())
+}
+
+// UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
+// Accepts the same JSON as UnmarshalJSON, streamed from dec.
+// Same comparator contract as UnmarshalJSON.
+func (t *treeSet[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	if t.cmp == nil {
+		return errors.New("unmarshal treeset: no comparator; construct the set with NewTreeSet before decoding, or use UnmarshalTreeSetJSON/UnmarshalTreeSetOrderedJSON")
+	}
+	var elements []T
+	if err := jsonv2.UnmarshalDecode(dec, &elements); err != nil {
+		return err
+	}
+	t.replaceElements(elements)
 	return nil
 }
 
@@ -676,10 +704,7 @@ func (t *treeSet[T]) GobDecode(data []byte) error {
 	if err := dec.Decode(&elements); err != nil {
 		return err
 	}
-	t.Clear()
-	for _, e := range elements {
-		t.add(e)
-	}
+	t.replaceElements(elements)
 	return nil
 }
 

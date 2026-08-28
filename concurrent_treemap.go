@@ -5,6 +5,8 @@ import (
 	"cmp"
 	"encoding/gob"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"iter"
 	"sync"
@@ -641,19 +643,7 @@ func (c *concurrentTreeMap[K, V]) CloneSorted() SortedMap[K, V] {
 // NOTE: The comparator is NOT serialized. Decode into a map constructed with
 // NewConcurrentTreeMap.
 func (c *concurrentTreeMap[K, V]) MarshalJSON() ([]byte, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	wrapped := serializableMap[K, V]{
-		Entries: make([]serializableEntry[K, V], 0, c.tm.Size()),
-	}
-	for k, v := range c.tm.Seq() {
-		wrapped.Entries = append(wrapped.Entries, serializableEntry[K, V]{
-			Key:   k,
-			Value: v,
-		})
-	}
-	return json.Marshal(wrapped)
+	return json.Marshal(serializableMap[K, V]{Entries: c.snapshotEntries()})
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -668,22 +658,43 @@ func (c *concurrentTreeMap[K, V]) UnmarshalJSON(data []byte) error {
 	return c.tm.UnmarshalJSON(data)
 }
 
+// snapshotEntries copies the entries in ascending key order under the read
+// lock, so encoding can run without holding it.
+func (c *concurrentTreeMap[K, V]) snapshotEntries() []serializableEntry[K, V] {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	entries := make([]serializableEntry[K, V], 0, c.tm.Size())
+	for k, v := range c.tm.Seq() {
+		entries = append(entries, serializableEntry[K, V]{Key: k, Value: v})
+	}
+	return entries
+}
+
+// MarshalJSONTo implements jsonv2.MarshalerTo.
+// Streams the same JSON as MarshalJSON into enc.
+func (c *concurrentTreeMap[K, V]) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return jsonv2.MarshalEncode(enc, serializableMap[K, V]{Entries: c.snapshotEntries()})
+}
+
+// UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
+// Accepts the same JSON as UnmarshalJSON, streamed from dec.
+// Same comparator contract as UnmarshalJSON.
+func (c *concurrentTreeMap[K, V]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.tm == nil {
+		return errors.New("unmarshal concurrent treemap: no comparator; construct the map with NewConcurrentTreeMap before decoding")
+	}
+	return c.tm.UnmarshalJSONFrom(dec)
+}
+
 // GobEncode implements gob.GobEncoder.
 // Serializes entries in ascending key order.
 //
 // NOTE: The comparator is NOT serialized. Decode into a map constructed with
 // NewConcurrentTreeMap.
 func (c *concurrentTreeMap[K, V]) GobEncode() ([]byte, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	entries := make([]serializableEntry[K, V], 0, c.tm.Size())
-	for k, v := range c.tm.Seq() {
-		entries = append(entries, serializableEntry[K, V]{
-			Key:   k,
-			Value: v,
-		})
-	}
+	entries := c.snapshotEntries()
 
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)

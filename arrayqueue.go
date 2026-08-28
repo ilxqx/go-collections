@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"iter"
 	"slices"
 )
@@ -153,6 +155,24 @@ func (q *arrayQueue[T]) MarshalJSON() ([]byte, error) {
 func (q *arrayQueue[T]) UnmarshalJSON(data []byte) error {
 	var slice []T
 	if err := json.Unmarshal(data, &slice); err != nil {
+		return err
+	}
+	q.data = slice
+	q.head = 0
+	return nil
+}
+
+// MarshalJSONTo implements jsonv2.MarshalerTo.
+// Streams the same JSON as MarshalJSON into enc.
+func (q *arrayQueue[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return jsonv2.MarshalEncode(enc, q.ToSlice())
+}
+
+// UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
+// Accepts the same JSON as UnmarshalJSON, streamed from dec.
+func (q *arrayQueue[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	var slice []T
+	if err := jsonv2.UnmarshalDecode(dec, &slice); err != nil {
 		return err
 	}
 	q.data = slice

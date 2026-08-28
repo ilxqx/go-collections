@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"iter"
 	"maps"
@@ -371,6 +373,12 @@ func (s *hashSet[T]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &slice); err != nil {
 		return err
 	}
+	return s.replaceFromSlice(slice)
+}
+
+// replaceFromSlice validates the decoded elements and replaces the set's
+// contents wholesale, so a rejected payload leaves the set untouched.
+func (s *hashSet[T]) replaceFromSlice(slice []T) error {
 	if err := validateHashable(slice); err != nil {
 		return fmt.Errorf("unmarshal hashset: %w", err)
 	}
@@ -380,6 +388,23 @@ func (s *hashSet[T]) UnmarshalJSON(data []byte) error {
 	}
 	s.m = m
 	return nil
+}
+
+// MarshalJSONTo implements jsonv2.MarshalerTo.
+// Streams the same JSON as MarshalJSON into enc.
+func (s *hashSet[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return jsonv2.MarshalEncode(enc, s.ToSlice())
+}
+
+// UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
+// Accepts the same JSON as UnmarshalJSON, streamed from dec.
+// A payload holding a dynamically unhashable element is rejected with an\n// error and leaves the set untouched.
+func (s *hashSet[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	var slice []T
+	if err := jsonv2.UnmarshalDecode(dec, &slice); err != nil {
+		return err
+	}
+	return s.replaceFromSlice(slice)
 }
 
 // GobEncode implements gob.GobEncoder.
@@ -400,15 +425,7 @@ func (s *hashSet[T]) GobDecode(data []byte) error {
 	if err := dec.Decode(&slice); err != nil {
 		return err
 	}
-	if err := validateHashable(slice); err != nil {
-		return fmt.Errorf("unmarshal hashset: %w", err)
-	}
-	m := make(map[T]struct{}, len(slice))
-	for _, elem := range slice {
-		m[elem] = struct{}{}
-	}
-	s.m = m
-	return nil
+	return s.replaceFromSlice(slice)
 }
 
 // Compile-time conformance checks (spot-check with concrete instantiation).

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"iter"
 
@@ -440,6 +442,27 @@ func (s *concurrentHashSet[T]) refill(elements []T) {
 func (s *concurrentHashSet[T]) UnmarshalJSON(data []byte) error {
 	var slice []T
 	if err := json.Unmarshal(data, &slice); err != nil {
+		return err
+	}
+	if err := validateHashable(slice); err != nil {
+		return fmt.Errorf("unmarshal concurrent hashset: %w", err)
+	}
+	s.refill(slice)
+	return nil
+}
+
+// MarshalJSONTo implements jsonv2.MarshalerTo.
+// Streams the same JSON as MarshalJSON into enc.
+func (s *concurrentHashSet[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return jsonv2.MarshalEncode(enc, s.ToSlice())
+}
+
+// UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
+// Accepts the same JSON as UnmarshalJSON, streamed from dec.
+// A payload holding a dynamically unhashable element is rejected with an\n// error and leaves the set untouched.
+func (s *concurrentHashSet[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	var slice []T
+	if err := jsonv2.UnmarshalDecode(dec, &slice); err != nil {
 		return err
 	}
 	if err := validateHashable(slice); err != nil {

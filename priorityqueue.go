@@ -5,6 +5,8 @@ import (
 	"container/heap"
 	"encoding/gob"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"iter"
 	"slices"
@@ -197,6 +199,29 @@ func (pq *priorityQueue[T]) UnmarshalJSON(data []byte) error {
 	}
 	var elements []T
 	if err := json.Unmarshal(data, &elements); err != nil {
+		return err
+	}
+	pq.data = elements
+	// Re-establish the heap invariant: the source need not be heap-ordered.
+	heap.Init(&heapWrapper[T]{pq: pq})
+	return nil
+}
+
+// MarshalJSONTo implements jsonv2.MarshalerTo.
+// Streams the same JSON as MarshalJSON into enc.
+func (pq *priorityQueue[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return jsonv2.MarshalEncode(enc, pq.data)
+}
+
+// UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
+// Accepts the same JSON as UnmarshalJSON, streamed from dec.
+// Same comparator contract as UnmarshalJSON.
+func (pq *priorityQueue[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	if pq.cmp == nil {
+		return errors.New("unmarshal priorityqueue: no comparator; construct the queue with NewPriorityQueue before decoding, or use UnmarshalPriorityQueueJSON/UnmarshalPriorityQueueOrderedJSON")
+	}
+	var elements []T
+	if err := jsonv2.UnmarshalDecode(dec, &elements); err != nil {
 		return err
 	}
 	pq.data = elements

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"iter"
 	"slices"
 	"sync/atomic"
@@ -616,6 +618,26 @@ func (l *lockFreeList[T]) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	// Clear and rebuild
+	l.Clear()
+	for _, elem := range slice {
+		l.Add(elem)
+	}
+	return nil
+}
+
+// MarshalJSONTo implements jsonv2.MarshalerTo.
+// Streams the same JSON as MarshalJSON into enc.
+func (l *lockFreeList[T]) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return jsonv2.MarshalEncode(enc, l.ToSlice())
+}
+
+// UnmarshalJSONFrom implements jsonv2.UnmarshalerFrom.
+// Accepts the same JSON as UnmarshalJSON, streamed from dec.
+func (l *lockFreeList[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	var slice []T
+	if err := jsonv2.UnmarshalDecode(dec, &slice); err != nil {
+		return err
+	}
 	l.Clear()
 	for _, elem := range slice {
 		l.Add(elem)
