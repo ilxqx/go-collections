@@ -128,10 +128,19 @@ func (d *arrayDeque[T]) PeekBack() (T, bool) {
 // ToSlice returns elements from front to back.
 func (d *arrayDeque[T]) ToSlice() []T {
 	out := make([]T, d.size)
-	for i := range d.size {
-		out[i] = d.at(i)
-	}
+	d.copyTo(out)
 	return out
+}
+
+// copyTo copies all elements front-to-back into dst (len(dst) >= size).
+// The circular buffer holds at most two contiguous segments, so two copy
+// calls replace a per-element loop with its modulo per element.
+func (d *arrayDeque[T]) copyTo(dst []T) {
+	if d.size == 0 {
+		return
+	}
+	n := copy(dst, d.buf[d.head:min(d.head+d.size, len(d.buf))])
+	copy(dst[n:], d.buf[:d.size-n])
 }
 
 // Seq returns a sequence from front to back.
@@ -166,9 +175,7 @@ func (d *arrayDeque[T]) ensureCapacityForOne() {
 		newCap = len(d.buf) * 2
 	}
 	newBuf := make([]T, newCap)
-	for i := range d.size {
-		newBuf[i] = d.at(i)
-	}
+	d.copyTo(newBuf)
 	d.buf = newBuf
 	d.head = 0
 	d.tail = d.size

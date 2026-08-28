@@ -78,69 +78,55 @@ func (s *hashSet[T]) ForEach(action func(element T) bool) {
 }
 
 // Add inserts element if absent. Returns true if the set changed.
+// The length delta detects the insert with a single map operation.
 func (s *hashSet[T]) Add(element T) bool {
-	if _, ok := s.m[element]; ok {
-		return false
-	}
+	n := len(s.m)
 	s.m[element] = struct{}{}
-	return true
+	return len(s.m) > n
 }
 
 // AddAll inserts all given elements. Returns the number of elements added.
 func (s *hashSet[T]) AddAll(elements ...T) int {
-	added := 0
+	n := len(s.m)
 	for _, e := range elements {
-		if _, ok := s.m[e]; !ok {
-			s.m[e] = struct{}{}
-			added++
-		}
+		s.m[e] = struct{}{}
 	}
-	return added
+	return len(s.m) - n
 }
 
 // AddSeq inserts all elements from the sequence. Returns the number added.
 func (s *hashSet[T]) AddSeq(seq iter.Seq[T]) int {
-	added := 0
+	n := len(s.m)
 	for v := range seq {
-		if _, ok := s.m[v]; !ok {
-			s.m[v] = struct{}{}
-			added++
-		}
+		s.m[v] = struct{}{}
 	}
-	return added
+	return len(s.m) - n
 }
 
 // Remove deletes the element if present. Returns true if removed.
+// The length delta detects the delete with a single map operation.
 func (s *hashSet[T]) Remove(element T) bool {
-	if _, ok := s.m[element]; ok {
-		delete(s.m, element)
-		return true
-	}
-	return false
+	n := len(s.m)
+	delete(s.m, element)
+	return len(s.m) < n
 }
 
 // RemoveAll deletes all given elements. Returns the number removed.
 func (s *hashSet[T]) RemoveAll(elements ...T) int {
-	removed := 0
+	n := len(s.m)
 	for _, e := range elements {
-		if _, ok := s.m[e]; ok {
-			delete(s.m, e)
-			removed++
-		}
+		delete(s.m, e)
 	}
-	return removed
+	return n - len(s.m)
 }
 
 // RemoveSeq removes all elements from the sequence. Returns the number removed.
 func (s *hashSet[T]) RemoveSeq(seq iter.Seq[T]) int {
-	removed := 0
+	n := len(s.m)
 	for v := range seq {
-		if _, ok := s.m[v]; ok {
-			delete(s.m, v)
-			removed++
-		}
+		delete(s.m, v)
 	}
-	return removed
+	return n - len(s.m)
 }
 
 // RemoveFunc removes elements satisfying predicate. Returns count removed.
@@ -198,12 +184,10 @@ func (s *hashSet[T]) ContainsAny(elements ...T) bool {
 
 // Union returns a new set: s ∪ other.
 func (s *hashSet[T]) Union(other Set[T]) Set[T] {
-	out := NewHashSetWithCapacity[T](len(s.m) + other.Size())
-	for v := range s.m {
-		out.Add(v)
-	}
+	// maps.Clone bulk-copies the receiver in one runtime call.
+	out := &hashSet[T]{m: maps.Clone(s.m)}
 	for v := range other.Seq() {
-		out.Add(v)
+		out.m[v] = struct{}{}
 	}
 	return out
 }

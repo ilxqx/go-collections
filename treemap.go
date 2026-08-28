@@ -439,8 +439,8 @@ func (t *treeMap[K, V]) PopLast() (Entry[K, V], bool) {
 	return Entry[K, V]{Key: me.key, Value: me.value}, true
 }
 
-// FloorKey returns the greatest key <= k.
-func (t *treeMap[K, V]) FloorKey(k K) (K, bool) {
+// floorEntry returns the stored entry with the greatest key <= k.
+func (t *treeMap[K, V]) floorEntry(k K) (mapEntry[K, V], bool) {
 	var res mapEntry[K, V]
 	found := false
 	t.bt.Descend(mapEntry[K, V]{key: k}, func(me mapEntry[K, V]) bool {
@@ -448,11 +448,11 @@ func (t *treeMap[K, V]) FloorKey(k K) (K, bool) {
 		found = true
 		return false
 	})
-	return res.key, found
+	return res, found
 }
 
-// CeilingKey returns the smallest key >= k.
-func (t *treeMap[K, V]) CeilingKey(k K) (K, bool) {
+// ceilingEntry returns the stored entry with the smallest key >= k.
+func (t *treeMap[K, V]) ceilingEntry(k K) (mapEntry[K, V], bool) {
 	var res mapEntry[K, V]
 	found := false
 	t.bt.Ascend(mapEntry[K, V]{key: k}, func(me mapEntry[K, V]) bool {
@@ -460,11 +460,11 @@ func (t *treeMap[K, V]) CeilingKey(k K) (K, bool) {
 		found = true
 		return false
 	})
-	return res.key, found
+	return res, found
 }
 
-// LowerKey returns the greatest key < k.
-func (t *treeMap[K, V]) LowerKey(k K) (K, bool) {
+// lowerEntry returns the stored entry with the greatest key < k.
+func (t *treeMap[K, V]) lowerEntry(k K) (mapEntry[K, V], bool) {
 	var res mapEntry[K, V]
 	found := false
 	t.bt.Descend(mapEntry[K, V]{key: k}, func(me mapEntry[K, V]) bool {
@@ -475,11 +475,11 @@ func (t *treeMap[K, V]) LowerKey(k K) (K, bool) {
 		}
 		return true
 	})
-	return res.key, found
+	return res, found
 }
 
-// HigherKey returns the smallest key > k.
-func (t *treeMap[K, V]) HigherKey(k K) (K, bool) {
+// higherEntry returns the stored entry with the smallest key > k.
+func (t *treeMap[K, V]) higherEntry(k K) (mapEntry[K, V], bool) {
 	var res mapEntry[K, V]
 	found := false
 	t.bt.Ascend(mapEntry[K, V]{key: k}, func(me mapEntry[K, V]) bool {
@@ -490,43 +490,55 @@ func (t *treeMap[K, V]) HigherKey(k K) (K, bool) {
 		}
 		return true
 	})
-	return res.key, found
+	return res, found
+}
+
+// FloorKey returns the greatest key <= k.
+func (t *treeMap[K, V]) FloorKey(k K) (K, bool) {
+	e, ok := t.floorEntry(k)
+	return e.key, ok
+}
+
+// CeilingKey returns the smallest key >= k.
+func (t *treeMap[K, V]) CeilingKey(k K) (K, bool) {
+	e, ok := t.ceilingEntry(k)
+	return e.key, ok
+}
+
+// LowerKey returns the greatest key < k.
+func (t *treeMap[K, V]) LowerKey(k K) (K, bool) {
+	e, ok := t.lowerEntry(k)
+	return e.key, ok
+}
+
+// HigherKey returns the smallest key > k.
+func (t *treeMap[K, V]) HigherKey(k K) (K, bool) {
+	e, ok := t.higherEntry(k)
+	return e.key, ok
 }
 
 // FloorEntry returns the entry with greatest key <= k.
 func (t *treeMap[K, V]) FloorEntry(k K) (Entry[K, V], bool) {
-	if key, ok := t.FloorKey(k); ok {
-		v, _ := t.Get(key)
-		return Entry[K, V]{Key: key, Value: v}, true
-	}
-	return Entry[K, V]{}, false
+	e, ok := t.floorEntry(k)
+	return Entry[K, V]{Key: e.key, Value: e.value}, ok
 }
 
 // CeilingEntry returns the entry with smallest key >= k.
 func (t *treeMap[K, V]) CeilingEntry(k K) (Entry[K, V], bool) {
-	if key, ok := t.CeilingKey(k); ok {
-		v, _ := t.Get(key)
-		return Entry[K, V]{Key: key, Value: v}, true
-	}
-	return Entry[K, V]{}, false
+	e, ok := t.ceilingEntry(k)
+	return Entry[K, V]{Key: e.key, Value: e.value}, ok
 }
 
 // LowerEntry returns the entry with greatest key < k.
 func (t *treeMap[K, V]) LowerEntry(k K) (Entry[K, V], bool) {
-	if key, ok := t.LowerKey(k); ok {
-		v, _ := t.Get(key)
-		return Entry[K, V]{Key: key, Value: v}, true
-	}
-	return Entry[K, V]{}, false
+	e, ok := t.lowerEntry(k)
+	return Entry[K, V]{Key: e.key, Value: e.value}, ok
 }
 
 // HigherEntry returns the entry with smallest key > k.
 func (t *treeMap[K, V]) HigherEntry(k K) (Entry[K, V], bool) {
-	if key, ok := t.HigherKey(k); ok {
-		v, _ := t.Get(key)
-		return Entry[K, V]{Key: key, Value: v}, true
-	}
-	return Entry[K, V]{}, false
+	e, ok := t.higherEntry(k)
+	return Entry[K, V]{Key: e.key, Value: e.value}, ok
 }
 
 // Range iterates entries with keys in [from, to] ascending.

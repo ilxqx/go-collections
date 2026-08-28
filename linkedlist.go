@@ -211,15 +211,36 @@ func (l *linkedList[T]) Insert(index int, element T) bool {
 }
 
 // InsertAll inserts all elements at index, shifting subsequent elements right.
+// The splice point is resolved once, so the cost is O(min(index, size-index)
+// + len(elements)) rather than one node walk per element.
 func (l *linkedList[T]) InsertAll(index int, elements ...T) bool {
 	if index < 0 || index > l.size {
 		return false
 	}
-	for i, e := range elements {
-		if !l.Insert(index+i, e) {
-			return false
-		}
+	if len(elements) == 0 {
+		return true
 	}
+	next := l.nodeAt(index) // nil when index == size: append at the tail
+	prev := l.tail
+	if next != nil {
+		prev = next.prev
+	}
+	for _, e := range elements {
+		n := &node[T]{value: e, prev: prev}
+		if prev != nil {
+			prev.next = n
+		} else {
+			l.head = n
+		}
+		prev = n
+	}
+	prev.next = next
+	if next != nil {
+		next.prev = prev
+	} else {
+		l.tail = prev
+	}
+	l.size += len(elements)
 	return true
 }
 

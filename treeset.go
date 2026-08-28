@@ -212,11 +212,9 @@ func (t *treeSet[T]) ContainsAny(elements ...T) bool {
 
 // Union returns a new sorted set with elements from both sets.
 func (t *treeSet[T]) Union(other Set[T]) Set[T] {
-	out := newTreeSet(t.cmp)
-	t.bt.Scan(func(item T) bool {
-		out.bt.Set(item)
-		return true
-	})
+	// Start from an O(1) copy-on-write clone of the receiver; Add keeps the
+	// receiver's representative on comparator-equal elements.
+	out := &treeSet[T]{bt: t.bt.Copy(), cmp: t.cmp}
 	for v := range other.Seq() {
 		out.Add(v)
 	}

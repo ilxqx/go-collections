@@ -474,104 +474,108 @@ func (c *concurrentSkipMap[K, V]) PopLast() (Entry[K, V], bool) {
 	}
 }
 
-// FloorKey returns the greatest key <= k.
-func (c *concurrentSkipMap[K, V]) FloorKey(k K) (K, bool) {
-	var res K
+// floorEntry returns the entry with the greatest key <= k (best-effort O(n) scan).
+func (c *concurrentSkipMap[K, V]) floorEntry(k K) (Entry[K, V], bool) {
+	var res Entry[K, V]
 	found := false
-	c.m.Range(func(x K, _ V) bool {
+	c.m.Range(func(x K, v V) bool {
 		if x <= k {
-			res = x
+			res = Entry[K, V]{Key: x, Value: v}
 			found = true
 			return true
 		}
 		return false
 	})
 	return res, found
+}
+
+// ceilingEntry returns the entry with the smallest key >= k (best-effort O(n) scan).
+func (c *concurrentSkipMap[K, V]) ceilingEntry(k K) (Entry[K, V], bool) {
+	var res Entry[K, V]
+	found := false
+	c.m.Range(func(x K, v V) bool {
+		if x >= k {
+			res = Entry[K, V]{Key: x, Value: v}
+			found = true
+			return false
+		}
+		return true
+	})
+	return res, found
+}
+
+// lowerEntry returns the entry with the greatest key < k (best-effort O(n) scan).
+func (c *concurrentSkipMap[K, V]) lowerEntry(k K) (Entry[K, V], bool) {
+	var res Entry[K, V]
+	found := false
+	c.m.Range(func(x K, v V) bool {
+		if x < k {
+			res = Entry[K, V]{Key: x, Value: v}
+			found = true
+			return true
+		}
+		return false
+	})
+	return res, found
+}
+
+// higherEntry returns the entry with the smallest key > k (best-effort O(n) scan).
+func (c *concurrentSkipMap[K, V]) higherEntry(k K) (Entry[K, V], bool) {
+	var res Entry[K, V]
+	found := false
+	c.m.Range(func(x K, v V) bool {
+		if x > k {
+			res = Entry[K, V]{Key: x, Value: v}
+			found = true
+			return false
+		}
+		return true
+	})
+	return res, found
+}
+
+// FloorKey returns the greatest key <= k.
+func (c *concurrentSkipMap[K, V]) FloorKey(k K) (K, bool) {
+	e, ok := c.floorEntry(k)
+	return e.Key, ok
 }
 
 // CeilingKey returns the smallest key >= k.
 func (c *concurrentSkipMap[K, V]) CeilingKey(k K) (K, bool) {
-	var res K
-	found := false
-	c.m.Range(func(x K, _ V) bool {
-		if x >= k {
-			res = x
-			found = true
-			return false
-		}
-		return true
-	})
-	return res, found
+	e, ok := c.ceilingEntry(k)
+	return e.Key, ok
 }
 
 // LowerKey returns the greatest key < k.
 func (c *concurrentSkipMap[K, V]) LowerKey(k K) (K, bool) {
-	var res K
-	found := false
-	c.m.Range(func(x K, _ V) bool {
-		if x < k {
-			res = x
-			found = true
-			return true
-		}
-		return false
-	})
-	return res, found
+	e, ok := c.lowerEntry(k)
+	return e.Key, ok
 }
 
 // HigherKey returns the smallest key > k.
 func (c *concurrentSkipMap[K, V]) HigherKey(k K) (K, bool) {
-	var res K
-	found := false
-	c.m.Range(func(x K, _ V) bool {
-		if x > k {
-			res = x
-			found = true
-			return false
-		}
-		return true
-	})
-	return res, found
+	e, ok := c.higherEntry(k)
+	return e.Key, ok
 }
 
 // FloorEntry returns entry with greatest key <= k.
 func (c *concurrentSkipMap[K, V]) FloorEntry(k K) (Entry[K, V], bool) {
-	if key, ok := c.FloorKey(k); ok {
-		if v, ok2 := c.m.Load(key); ok2 {
-			return Entry[K, V]{Key: key, Value: v}, true
-		}
-	}
-	return Entry[K, V]{}, false
+	return c.floorEntry(k)
 }
 
 // CeilingEntry returns entry with smallest key >= k.
 func (c *concurrentSkipMap[K, V]) CeilingEntry(k K) (Entry[K, V], bool) {
-	if key, ok := c.CeilingKey(k); ok {
-		if v, ok2 := c.m.Load(key); ok2 {
-			return Entry[K, V]{Key: key, Value: v}, true
-		}
-	}
-	return Entry[K, V]{}, false
+	return c.ceilingEntry(k)
 }
 
 // LowerEntry returns entry with greatest key < k.
 func (c *concurrentSkipMap[K, V]) LowerEntry(k K) (Entry[K, V], bool) {
-	if key, ok := c.LowerKey(k); ok {
-		if v, ok2 := c.m.Load(key); ok2 {
-			return Entry[K, V]{Key: key, Value: v}, true
-		}
-	}
-	return Entry[K, V]{}, false
+	return c.lowerEntry(k)
 }
 
 // HigherEntry returns entry with smallest key > k.
 func (c *concurrentSkipMap[K, V]) HigherEntry(k K) (Entry[K, V], bool) {
-	if key, ok := c.HigherKey(k); ok {
-		if v, ok2 := c.m.Load(key); ok2 {
-			return Entry[K, V]{Key: key, Value: v}, true
-		}
-	}
-	return Entry[K, V]{}, false
+	return c.higherEntry(k)
 }
 
 // Range iterates entries with keys in [from, to] ascending.

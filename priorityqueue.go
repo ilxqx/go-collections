@@ -2,7 +2,6 @@ package collections
 
 import (
 	"bytes"
-	"container/heap"
 	"encoding/gob"
 	"encoding/json"
 	"encoding/json/jsontext"
@@ -22,32 +21,45 @@ type priorityQueue[T any] struct {
 	cmp  Comparator[T]
 }
 
-// heapWrapper wraps priorityQueue to implement container/heap.Interface.
-type heapWrapper[T any] struct {
-	pq *priorityQueue[T]
+// siftUp moves the element at index i toward the root until the heap
+// invariant holds. O(log n).
+func (pq *priorityQueue[T]) siftUp(i int) {
+	for i > 0 {
+		parent := (i - 1) / 2
+		if pq.cmp(pq.data[i], pq.data[parent]) >= 0 {
+			return
+		}
+		pq.data[i], pq.data[parent] = pq.data[parent], pq.data[i]
+		i = parent
+	}
 }
 
-func (h *heapWrapper[T]) Len() int { return len(h.pq.data) }
-
-func (h *heapWrapper[T]) Less(i, j int) bool {
-	return h.pq.cmp(h.pq.data[i], h.pq.data[j]) < 0
+// siftDown moves the element at index i toward the leaves until the heap
+// invariant holds. O(log n).
+func (pq *priorityQueue[T]) siftDown(i int) {
+	n := len(pq.data)
+	for {
+		left := 2*i + 1
+		if left >= n {
+			return
+		}
+		smallest := left
+		if right := left + 1; right < n && pq.cmp(pq.data[right], pq.data[left]) < 0 {
+			smallest = right
+		}
+		if pq.cmp(pq.data[smallest], pq.data[i]) >= 0 {
+			return
+		}
+		pq.data[i], pq.data[smallest] = pq.data[smallest], pq.data[i]
+		i = smallest
+	}
 }
 
-func (h *heapWrapper[T]) Swap(i, j int) {
-	h.pq.data[i], h.pq.data[j] = h.pq.data[j], h.pq.data[i]
-}
-
-func (h *heapWrapper[T]) Push(x any) {
-	h.pq.data = append(h.pq.data, x.(T))
-}
-
-func (h *heapWrapper[T]) Pop() any {
-	n := len(h.pq.data)
-	x := h.pq.data[n-1]
-	var zero T
-	h.pq.data[n-1] = zero
-	h.pq.data = h.pq.data[:n-1]
-	return x
+// heapify re-establishes the heap invariant over the whole backing slice. O(n).
+func (pq *priorityQueue[T]) heapify() {
+	for i := len(pq.data)/2 - 1; i >= 0; i-- {
+		pq.siftDown(i)
+	}
 }
 
 // NewPriorityQueue creates an empty priority queue with a custom comparator.
@@ -98,15 +110,16 @@ func NewPriorityQueueFrom[T any](cmp Comparator[T], elements ...T) PriorityQueue
 		cmp:  cmp,
 	}
 	copy(pq.data, elements)
-	heap.Init(&heapWrapper[T]{pq: pq})
+	pq.heapify()
 	return pq
 }
 
 // NewMaxPriorityQueue creates a max-heap priority queue for Ordered types.
 // Largest element has highest priority.
 func NewMaxPriorityQueue[T Ordered]() PriorityQueue[T] {
+	c := CompareFunc[T]()
 	return NewPriorityQueue(func(a, b T) int {
-		return CompareFunc[T]()(b, a) // Reverse comparison
+		return c(b, a) // Reverse comparison
 	})
 }
 
@@ -130,11 +143,22 @@ func (pq *priorityQueue[T]) String() string {
 
 // Push adds an element to the queue. O(log n).
 func (pq *priorityQueue[T]) Push(element T) {
-	heap.Push(&heapWrapper[T]{pq: pq}, element)
+	pq.data = append(pq.data, element)
+	pq.siftUp(len(pq.data) - 1)
 }
 
 // PushAll adds all elements to the queue.
 func (pq *priorityQueue[T]) PushAll(elements ...T) {
+	if len(elements) == 0 {
+		return
+	}
+	// For batches comparable to the heap size, one O(n+m) heapify beats
+	// m separate O(log n) sift-ups.
+	if len(elements) >= len(pq.data) {
+		pq.data = append(pq.data, elements...)
+		pq.heapify()
+		return
+	}
 	for _, e := range elements {
 		pq.Push(e)
 	}
@@ -146,7 +170,14 @@ func (pq *priorityQueue[T]) Pop() (T, bool) {
 		var zero T
 		return zero, false
 	}
-	v := heap.Pop(&heapWrapper[T]{pq: pq}).(T)
+	v := pq.data[0]
+	n := len(pq.data) - 1
+	pq.data[0] = pq.data[n]
+	// Clear the vacated slot to drop references promptly.
+	var zero T
+	pq.data[n] = zero
+	pq.data = pq.data[:n]
+	pq.siftDown(0)
 	return v, true
 }
 
@@ -203,7 +234,7 @@ func (pq *priorityQueue[T]) UnmarshalJSON(data []byte) error {
 	}
 	pq.data = elements
 	// Re-establish the heap invariant: the source need not be heap-ordered.
-	heap.Init(&heapWrapper[T]{pq: pq})
+	pq.heapify()
 	return nil
 }
 
@@ -226,7 +257,7 @@ func (pq *priorityQueue[T]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	}
 	pq.data = elements
 	// Re-establish the heap invariant: the source need not be heap-ordered.
-	heap.Init(&heapWrapper[T]{pq: pq})
+	pq.heapify()
 	return nil
 }
 
@@ -259,7 +290,7 @@ func (pq *priorityQueue[T]) GobDecode(data []byte) error {
 	}
 	pq.data = elements
 	// Re-establish the heap invariant: the source need not be heap-ordered.
-	heap.Init(&heapWrapper[T]{pq: pq})
+	pq.heapify()
 	return nil
 }
 
