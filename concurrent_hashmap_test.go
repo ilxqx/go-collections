@@ -734,26 +734,26 @@ func TestConcurrentHashMap_NilInterfaceKey(t *testing.T) {
 	t.Parallel()
 	m := NewConcurrentHashMap[any, int]()
 	_, existed := m.Put(nil, 1)
-	require.False(t, existed, "the nil key should be new")
+	assert.False(t, existed, "the nil key should be new")
 	v, ok := m.Get(nil)
 	require.True(t, ok, "the nil key should be present")
-	require.Equal(t, 1, v, "the stored value should round-trip")
+	assert.Equal(t, 1, v, "the stored value should round-trip")
 
 	old, existed := m.Put(nil, 2)
-	require.True(t, existed, "overwriting the nil key should report the old value")
-	require.Equal(t, 1, old, "the old value should be returned")
+	assert.True(t, existed, "overwriting the nil key should report the old value")
+	assert.Equal(t, 1, old, "the old value should be returned")
 
 	m.Put("k", 3)
-	require.Equal(t, 2, m.Size(), "nil and k should coexist")
+	assert.Equal(t, 2, m.Size(), "nil and k should coexist")
 
 	got, computed := m.GetOrCompute(nil, func() int { return 99 })
-	require.False(t, computed, "the nil key already has a value")
-	require.Equal(t, 2, got, "GetOrCompute should return the stored value")
+	assert.False(t, computed, "the nil key already has a value")
+	assert.Equal(t, 2, got, "GetOrCompute should return the stored value")
 
 	v, ok = m.RemoveAndGet(nil)
 	require.True(t, ok, "the nil key should be removable")
-	require.Equal(t, 2, v, "RemoveAndGet should return the stored value")
-	require.False(t, m.ContainsKey(nil), "the nil key should be gone")
+	assert.Equal(t, 2, v, "RemoveAndGet should return the stored value")
+	assert.False(t, m.ContainsKey(nil), "the nil key should be gone")
 }
 
 // The interface-keyed hasher must survive every entry path into the backing
@@ -764,8 +764,8 @@ func TestConcurrentHashMap_InterfaceKeyedPaths(t *testing.T) {
 	m := NewConcurrentHashMapFrom(map[any]int{nil: 1, "a": 2, 3: 3})
 	v, ok := m.Get(nil)
 	require.True(t, ok, "the nil key from the source map should be present")
-	require.Equal(t, 1, v, "the nil key's value should round-trip")
-	require.Equal(t, 3, m.Size(), "all source entries should land")
+	assert.Equal(t, 1, v, "the nil key's value should round-trip")
+	assert.Equal(t, 3, m.Size(), "all source entries should land")
 
 	gob.Register(NewConcurrentHashMap[any, int]())
 	type payload struct{ M Map[any, int] }
@@ -775,17 +775,21 @@ func TestConcurrentHashMap_InterfaceKeyedPaths(t *testing.T) {
 	require.NoError(t, gob.NewDecoder(&buf).Decode(&dst), "decoding into a zero-value interface-keyed receiver should succeed")
 	v, ok = dst.M.Get(nil)
 	require.True(t, ok, "the decoded map should keep the nil key")
-	require.Equal(t, 1, v, "the nil key's value should survive the round-trip")
-	require.Equal(t, 3, dst.M.Size(), "the decoded map should hold every entry")
+	assert.Equal(t, 1, v, "the nil key's value should survive the round-trip")
+	assert.Equal(t, 3, dst.M.Size(), "the decoded map should hold every entry")
 
 	// Enough inserts to force several table resizes, which re-hash every key.
 	const n = 3000
 	for i := range n {
 		dst.M.Put(i, i)
 	}
-	require.Equal(t, n+2, dst.M.Size(), "every key should survive the resizes (3 overwrites the source entry)")
-	for _, k := range []any{nil, "a", 0, n / 2, n - 1} {
-		require.True(t, dst.M.ContainsKey(k), "key %v should still be present after resizing", k)
+	assert.Equal(t, n+2, dst.M.Size(), "every key should survive the resizes (3 overwrites the source entry)")
+	assert.True(t, dst.M.ContainsKey(nil), "the nil key should survive the resizes")
+	assert.True(t, dst.M.ContainsKey("a"), `the "a" key should survive the resizes`)
+	for i := range n {
+		v, ok := dst.M.Get(i)
+		require.Truef(t, ok, "key %d should still be present after resizing", i)
+		require.Equalf(t, i, v, "key %d should keep its value after resizing", i)
 	}
 }
 

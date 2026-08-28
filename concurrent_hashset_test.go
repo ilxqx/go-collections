@@ -358,27 +358,27 @@ func TestConcurrentHashSet_DecodeRejectsUnhashableElements(t *testing.T) {
 func TestConcurrentHashSet_NilInterfaceElement(t *testing.T) {
 	t.Parallel()
 	s := NewConcurrentHashSet[any]()
-	require.True(t, s.Add(nil), "adding a nil element should report a change")
-	require.True(t, s.Contains(nil), "the set should contain nil")
-	require.False(t, s.Add(nil), "re-adding nil should report no change")
+	assert.True(t, s.Add(nil), "adding a nil element should report a change")
+	assert.True(t, s.Contains(nil), "the set should contain nil")
+	assert.False(t, s.Add(nil), "re-adding nil should report no change")
 	s.Add("x")
-	require.Equal(t, 2, s.Size(), "nil and x should coexist")
-	require.True(t, s.Remove(nil), "nil should be removable")
-	require.False(t, s.Contains(nil), "nil should be gone after removal")
+	assert.Equal(t, 2, s.Size(), "nil and x should coexist")
+	assert.True(t, s.Remove(nil), "nil should be removable")
+	assert.False(t, s.Contains(nil), "nil should be gone after removal")
 
 	s2 := NewConcurrentHashSetFrom[any]("old")
 	require.NoError(t, s2.(json.Unmarshaler).UnmarshalJSON([]byte(`[null,1]`)),
 		"a payload holding null should decode")
-	require.True(t, s2.Contains(nil), "the decoded set should contain nil")
-	require.True(t, s2.Contains(float64(1)), "the decoded set should contain 1")
-	require.False(t, s2.Contains("old"), "the old contents should be replaced")
+	assert.True(t, s2.Contains(nil), "the decoded set should contain nil")
+	assert.True(t, s2.Contains(float64(1)), "the decoded set should contain 1")
+	assert.False(t, s2.Contains("old"), "the old contents should be replaced")
 
 	var buf bytes.Buffer
 	require.NoError(t, gob.NewEncoder(&buf).Encode([]any{nil, "a"}), "gob encodes nil interface values")
 	require.NoError(t, s2.(gob.GobDecoder).GobDecode(buf.Bytes()), "a gob payload holding nil should decode")
-	require.True(t, s2.Contains(nil), "the gob-decoded set should contain nil")
-	require.True(t, s2.Contains("a"), "the gob-decoded set should contain a")
-	require.Equal(t, 2, s2.Size(), "the gob payload should replace the contents")
+	assert.True(t, s2.Contains(nil), "the gob-decoded set should contain nil")
+	assert.True(t, s2.Contains("a"), "the gob-decoded set should contain a")
+	assert.Equal(t, 2, s2.Size(), "the gob payload should replace the contents")
 }
 
 // The interface-keyed hasher must survive every entry path into the backing
@@ -394,18 +394,20 @@ func TestConcurrentHashSet_InterfaceElementPaths(t *testing.T) {
 	require.NoError(t, gob.NewEncoder(&buf).Encode(src), "encoding a set holding nil should succeed")
 	var dst payload
 	require.NoError(t, gob.NewDecoder(&buf).Decode(&dst), "decoding into a zero-value interface-element receiver should succeed")
-	require.True(t, dst.S.Contains(nil), "the decoded set should keep the nil element")
-	require.True(t, dst.S.Contains("a"), "the decoded set should keep a")
-	require.Equal(t, 3, dst.S.Size(), "the decoded set should hold every element")
+	assert.True(t, dst.S.Contains(nil), "the decoded set should keep the nil element")
+	assert.True(t, dst.S.Contains("a"), "the decoded set should keep a")
+	assert.Equal(t, 3, dst.S.Size(), "the decoded set should hold every element")
 
 	// Enough inserts to force several table resizes, which re-hash every key.
 	const n = 3000
 	for i := range n {
 		dst.S.Add(i)
 	}
-	require.Equal(t, n+2, dst.S.Size(), "every element should survive the resizes (3 was already present)")
-	for _, e := range []any{nil, "a", 0, n / 2, n - 1} {
-		require.True(t, dst.S.Contains(e), "element %v should still be present after resizing", e)
+	assert.Equal(t, n+2, dst.S.Size(), "every element should survive the resizes (3 was already present)")
+	assert.True(t, dst.S.Contains(nil), "the nil element should survive the resizes")
+	assert.True(t, dst.S.Contains("a"), `the "a" element should survive the resizes`)
+	for i := range n {
+		require.Truef(t, dst.S.Contains(i), "element %d should still be present after resizing", i)
 	}
 }
 
