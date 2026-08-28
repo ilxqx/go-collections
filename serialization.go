@@ -3,7 +3,6 @@ package collections
 import (
 	"bytes"
 	"encoding/gob"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -58,13 +57,12 @@ func UnmarshalTreeSetJSON[T any](data []byte, comparator Comparator[T]) (SortedS
 		return nil, errors.New("unmarshal treeset: comparator required")
 	}
 
-	var elements []T
-	if err := json.Unmarshal(data, &elements); err != nil {
+	// Construct and delegate, so the wire format is defined only by the
+	// container's own decoder — the shape the Gob helpers already use.
+	set := newTreeSet(comparator)
+	if err := set.UnmarshalJSON(data); err != nil {
 		return nil, fmt.Errorf("unmarshal treeset: %w", err)
 	}
-
-	set := NewTreeSet(comparator)
-	set.AddAll(elements...)
 	return set, nil
 }
 
@@ -81,14 +79,9 @@ func UnmarshalTreeMapJSON[K, V any](data []byte, comparator Comparator[K]) (Sort
 		return nil, errors.New("unmarshal treemap: comparator required")
 	}
 
-	var wrapped serializableMap[K, V]
-	if err := json.Unmarshal(data, &wrapped); err != nil {
+	m := newTreeMap[K, V](comparator)
+	if err := m.UnmarshalJSON(data); err != nil {
 		return nil, fmt.Errorf("unmarshal treemap: %w", err)
-	}
-
-	m := NewTreeMap[K, V](comparator)
-	for _, entry := range wrapped.Entries {
-		m.Put(entry.Key, entry.Value)
 	}
 	return m, nil
 }
@@ -148,13 +141,10 @@ func UnmarshalPriorityQueueJSON[T any](data []byte, comparator Comparator[T]) (P
 		return nil, errors.New("unmarshal priorityqueue: comparator required")
 	}
 
-	var elements []T
-	if err := json.Unmarshal(data, &elements); err != nil {
+	pq := newPriorityQueue(comparator)
+	if err := pq.UnmarshalJSON(data); err != nil {
 		return nil, fmt.Errorf("unmarshal priorityqueue: %w", err)
 	}
-
-	pq := NewPriorityQueue(comparator)
-	pq.PushAll(elements...)
 	return pq, nil
 }
 
